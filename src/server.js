@@ -436,15 +436,21 @@ function panelHtml(csrfToken = "") {
     .pill { display:inline-flex; align-items:center; gap:7px; border:1px solid #46506d; border-radius:6px; padding:6px 10px; font-weight:900; font-size:13px; white-space:nowrap; background:#333a55; color:#dfe5ff; }
     .pill.ok { color:#9ff0bd; border-color:#397e57; background:#203d31; }
     .pill.off { color:#ffb4b7; border-color:#7a3b43; background:#442a35; }
-    .server-gallery { display:grid; grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); gap:14px; align-items:stretch; }
-    .overview-board { display:grid; grid-template-columns:minmax(0, 1fr) minmax(280px, 340px); gap:14px; align-items:start; }
-    .create-card { min-height:132px; border:1px solid #3a4260; border-radius:8px; background:#2c334d; padding:16px; display:grid; gap:12px; }
-    .create-card .fields { grid-template-columns:1fr 112px; }
-    .server-card { width:100%; min-height:132px; padding:16px; border:1px solid #3a4260; border-radius:8px; background:linear-gradient(135deg, rgba(47,55,84,.94), rgba(36,42,64,.94)); display:grid; gap:12px; text-align:left; align-content:start; }
-    .server-card.active { border-color:var(--blue); box-shadow:0 0 0 2px rgba(91,140,255,.18), inset 0 3px 0 var(--blue); }
-    .server-card-top { display:flex; align-items:center; justify-content:space-between; gap:10px; }
-    .server-icon { width:44px; height:44px; border-radius:8px; display:grid; place-items:center; background:linear-gradient(135deg, #61d18b, #2f8b57); box-shadow:0 10px 22px rgba(84,209,138,.18); }
-    .server-card strong { font-size:17px; }
+    .server-gallery { display:grid; gap:10px; align-items:start; }
+    .overview-board { display:grid; grid-template-columns:minmax(460px, 1fr) 360px; gap:16px; align-items:start; }
+    .create-card { border:1px solid #3a4260; border-radius:8px; background:#252c43; padding:16px; display:grid; gap:14px; }
+    .create-card .fields { grid-template-columns:minmax(0, 1fr) 112px; }
+    .create-card button.primary { width:100%; }
+    .server-card { width:100%; min-height:86px; padding:14px; border:1px solid #3a4260; border-radius:8px; background:#242b42; display:grid; grid-template-columns:44px minmax(0, 1fr) auto; gap:14px; text-align:left; align-items:center; }
+    .server-card:hover { background:#29314b; border-color:#4a5680; }
+    .server-card.active { border-color:var(--blue); box-shadow:inset 4px 0 0 var(--blue); }
+    .server-icon { width:42px; height:42px; border-radius:8px; display:grid; place-items:center; background:linear-gradient(135deg, #61d18b, #2f8b57); box-shadow:0 10px 22px rgba(84,209,138,.18); }
+    .server-card-main { display:grid; gap:5px; min-width:0; }
+    .server-card-title { display:flex; align-items:center; gap:10px; min-width:0; }
+    .server-card-title strong { font-size:17px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .server-card-meta { display:flex; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:13px; font-weight:800; }
+    .server-card-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+    .server-card-actions button { min-height:36px; padding:0 10px; }
     .server-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     .stat-box { min-height:54px; border-radius:7px; background:#242b42; padding:9px; }
     .stat-box span { display:block; color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase; }
@@ -475,7 +481,7 @@ function panelHtml(csrfToken = "") {
     .tab-panel.split.active { display:grid; grid-template-columns:minmax(360px, .9fr) minmax(440px, 1.25fr); gap:18px; align-items:start; }
     .toast { position:fixed; right:18px; bottom:18px; max-width:min(460px, calc(100vw - 36px)); border-radius:8px; border:1px solid #4a5576; background:#2e3654; color:#fff; padding:13px 15px; box-shadow:0 16px 40px rgba(0,0,0,.35); display:none; z-index:5; }
     @media (max-width: 1120px) { .shell { grid-template-columns:1fr; } .sidebar { position:relative; min-height:auto; max-height:none; } .dashboard, .tab-panel.split.active, .overview-board, .file-layout { grid-template-columns:1fr; } .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 620px) { .main { padding:14px; } .hero { display:grid; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; } .grid, .left-column .grid, .fields, .create-card .fields, .server-stats, .form-grid, .resource-grid { grid-template-columns:1fr; } .left-column .metric:nth-child(5) { grid-column:auto; } .actions button, .actions a.button { flex:1 1 auto; } }
+    @media (max-width: 620px) { .main { padding:14px; } .hero { display:grid; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; } .grid, .left-column .grid, .fields, .create-card .fields, .server-stats, .form-grid, .resource-grid { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .left-column .metric:nth-child(5) { grid-column:auto; } .actions button, .actions a.button { flex:1 1 auto; } }
   </style>
 </head>
 <body>
@@ -818,17 +824,26 @@ function renderServerGallery() {
     const status = server.status || {};
     const active = server.id === activeId ? " active" : "";
     const pill = status.running ? '<span class="pill ok">Online</span>' : '<span class="pill off">Offline</span>';
-    return '<button class="server-card' + active + '" data-server="' + escapeHtmlClient(server.id) + '">' +
-      '<span class="server-card-top">' +
-        '<span class="server-icon"><i data-lucide="box"></i></span>' +
-        pill +
-      '</span>' +
-      '<strong>' + escapeHtmlClient(server.name) + '</strong>' +
-      '<span class="muted">Cliquer pour gérer</span>' +
-    '</button>';
+    const port = escapeHtmlClient(status.gamePort || "-");
+    const world = escapeHtmlClient(status.worldName || "-");
+    const address = escapeHtmlClient(serverAddress(status));
+    return '<article class="server-card' + active + '" data-server-card="' + escapeHtmlClient(server.id) + '">' +
+      '<span class="server-icon"><i data-lucide="box"></i></span>' +
+      '<div class="server-card-main">' +
+        '<div class="server-card-title"><strong>' + escapeHtmlClient(server.name) + '</strong>' + pill + '</div>' +
+        '<div class="server-card-meta"><span>Port ' + port + '</span><span>' + address + '</span><span>' + world + '</span></div>' +
+      '</div>' +
+      '<div class="server-card-actions">' +
+        '<button data-server="' + escapeHtmlClient(server.id) + '"><i data-lucide="settings"></i>Gérer</button>' +
+        '<button class="red" data-delete-server="' + escapeHtmlClient(server.id) + '"><i data-lucide="trash-2"></i>Supprimer</button>' +
+      '</div>' +
+    '</article>';
   }).join("") || '<div class="muted">Aucun serveur.</div>';
   target.querySelectorAll("[data-server]").forEach((button) => {
     button.onclick = () => openServer(button.dataset.server);
+  });
+  target.querySelectorAll("[data-delete-server]").forEach((button) => {
+    button.onclick = () => deleteServerById(button.dataset.deleteServer);
   });
   lucide.createIcons();
 }
@@ -1081,6 +1096,25 @@ function requireTypedConfirmation(message, expected) {
   return value === expected;
 }
 
+async function deleteServerById(id) {
+  const server = servers.find((item) => item.id === id);
+  if (!server) return;
+  if (!requireTypedConfirmation("Supprimer " + server.name + " avec ses fichiers et sauvegardes ?", server.name)) return;
+  await action("Serveur supprime.", async () => {
+    const previousActive = activeId;
+    activeId = server.id;
+    await api(endpoint(""), { method:"DELETE", body: JSON.stringify({ confirm: server.name }) });
+    if (previousActive === server.id) {
+      activeId = "";
+      viewMode = "overview";
+      localStorage.removeItem("bedrockActiveServer");
+      loadedPropertiesFor = "";
+    } else {
+      activeId = previousActive;
+    }
+  }, { allowNoActive: true });
+}
+
 async function action(label, fn, options = {}) {
   if (busy || (!activeId && !options.allowNoActive)) return;
   setBusy(true);
@@ -1140,15 +1174,9 @@ $("saveServer").onclick = () => action("Serveur modifié.", () => api(endpoint("
 $("deleteServer").onclick = () => {
   const server = activeServer();
   if (!server) return;
-  if (!requireTypedConfirmation("Supprimer " + server.name + " avec ses fichiers et sauvegardes ?", server.name)) return;
-  action("Serveur supprimé.", async () => {
-    await api(endpoint(""), { method:"DELETE", body: JSON.stringify({ confirm: server.name }) });
-    activeId = "";
-    viewMode = "overview";
-    localStorage.removeItem("bedrockActiveServer");
-    loadedPropertiesFor = "";
-  });
+  deleteServerById(server.id);
 };
+
 $("createServer").onclick = () => {
   action("Serveur créé.", async () => {
     const data = await api("/api/servers", {
