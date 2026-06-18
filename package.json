@@ -1,0 +1,19 @@
+{
+  "name": "bedrock-railway-panel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "node --check src/server.js && node --check src/bedrock-manager.js && node --check src/multi-server-manager.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0",
+    "unzipper": "^0.12.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
