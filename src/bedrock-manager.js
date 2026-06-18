@@ -60,6 +60,7 @@ export class BedrockManager {
     this.manualStop = false;
     this.logLines = [];
     this.maxLogs = 1200;
+    this.logWaiters = [];
   }
 
   async status() {
@@ -237,16 +238,21 @@ export class BedrockManager {
 
   async createBackup() {
     await fsp.mkdir(this.backupDir, { recursive: true });
+    let saveHeld = false;
     if (this.isRunning()) {
       this.child.stdin.write("save hold\n");
-      await delay(2000);
+      saveHeld = true;
+      await this.waitForLog(/ready to be copied|saving has been disabled|save hold|saved/i, 15000);
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
     const filename = `bedrock-backup-${stamp}.zip`;
     const target = path.join(this.backupDir, filename);
-    await archivePaths(this.serverDir, target, [...BEDROCK_FOLDERS, ...BEDROCK_FILES]);
-    if (this.isRunning()) {
-      this.child.stdin.write("save resume\n");
+    try {
+      await archivePaths(this.serverDir, target, [...BEDROCK_FOLDERS, ...BEDROCK_FILES]);
+    } finally {
+      if (saveHeld && this.isRunning()) {
+        this.child.stdin.write("save resume\n");
+      }
     }
     const stats = await fsp.stat(target);
     return { name: filename, size: stats.size, sizeLabel: formatBytes(stats.size), createdAt: stats.mtime.toISOString() };
@@ -362,6 +368,31 @@ export class BedrockManager {
     if (this.logLines.length > this.maxLogs) {
       this.logLines.splice(0, this.logLines.length - this.maxLogs);
     }
+    for (const line of parts) {
+      for (const waiter of [...this.logWaiters]) {
+        if (waiter.pattern.test(line)) waiter.resolve(line);
+      }
+    }
+    this.logWaiters = this.logWaiters.filter((waiter) => !waiter.done);
+  }
+
+  waitForLog(pattern, timeoutMs) {
+    return new Promise((resolve, reject) => {
+      const waiter = {
+        pattern,
+        done: false,
+        resolve: (line) => {
+          waiter.done = true;
+          clearTimeout(timer);
+          resolve(line);
+        }
+      };
+      const timer = setTimeout(() => {
+        waiter.done = true;
+        reject(new Error("Le serveur n'a pas confirme la pause des sauvegardes a temps."));
+      }, timeoutMs);
+      this.logWaiters.push(waiter);
+    });
   }
 }
 

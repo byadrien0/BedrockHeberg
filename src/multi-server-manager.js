@@ -86,6 +86,7 @@ export class MultiServerManager {
     const id = await this.nextId(name);
     const port = Number(input.port || (await this.nextPort()));
     validatePort(port);
+    await this.assertPortAvailable(port);
     const serverDir = path.join(this.instancesRoot, id);
     const backupDir = path.join(this.backupRoot, id);
     const template = input.templateServerId ? this.get(input.templateServerId) : null;
@@ -124,6 +125,7 @@ export class MultiServerManager {
     if (input.port !== undefined && input.port !== "") {
       const port = Number(input.port);
       validatePort(port);
+      await this.assertPortAvailable(port, id);
       await updateProperties(manager, { name: meta.name, port });
     } else if (input.name) {
       await updateProperties(manager, { name: meta.name });
@@ -216,6 +218,19 @@ export class MultiServerManager {
     let port = 19132;
     while (ports.includes(port)) port += 2;
     return port;
+  }
+
+  async assertPortAvailable(port, ignoredId = "") {
+    for (const server of this.servers) {
+      if (server.id === ignoredId) continue;
+      const current = Number(await this.requireManager(server.id).readProperty("server-port").catch(() => ""));
+      if (current === port) {
+        throw new Error(`Le port ${port} est deja utilise par ${server.name}.`);
+      }
+      if (current === port + 1) {
+        throw new Error(`Le port IPv6 associe ${port + 1} est deja utilise par ${server.name}.`);
+      }
+    }
   }
 }
 

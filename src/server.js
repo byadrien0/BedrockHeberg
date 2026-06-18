@@ -1,6 +1,8 @@
 import express from "express";
 import session from "express-session";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MultiServerManager } from "./multi-server-manager.js";
@@ -11,6 +13,7 @@ const port = Number(process.env.PORT || 3000);
 const isProduction = process.env.NODE_ENV === "production";
 const adminPassword = process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString("base64url");
 const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+const sessionDir = path.resolve(process.env.SESSION_DIR || defaultSessionDir(rootDir));
 const usingGeneratedPassword = !process.env.ADMIN_PASSWORD;
 const loginFailures = new Map();
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
@@ -22,6 +25,47 @@ if (isProduction && !process.env.ADMIN_PASSWORD) {
 
 if (isProduction && !process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET doit etre defini en production.");
+}
+
+function createFileSessionStore(dir) {
+  class PersistentSessionStore extends session.Store {
+    constructor() {
+      super();
+      this.dir = dir;
+      fs.mkdirSync(this.dir, { recursive: true });
+    }
+
+    get(sid, callback) {
+      fsp.readFile(this.fileFor(sid), "utf8")
+        .then((content) => callback(null, JSON.parse(content)))
+        .catch((error) => callback(error.code === "ENOENT" ? null : error));
+    }
+
+    set(sid, sess, callback) {
+      const content = JSON.stringify(sess);
+      fsp.mkdir(this.dir, { recursive: true })
+        .then(() => fsp.writeFile(this.fileFor(sid), content, "utf8"))
+        .then(() => callback?.())
+        .catch((error) => callback?.(error));
+    }
+
+    destroy(sid, callback) {
+      fsp.rm(this.fileFor(sid), { force: true })
+        .then(() => callback?.())
+        .catch((error) => callback?.(error));
+    }
+
+    touch(sid, sess, callback) {
+      this.set(sid, sess, callback);
+    }
+
+    fileFor(sid) {
+      const safeName = crypto.createHash("sha256").update(String(sid)).digest("hex");
+      return path.join(this.dir, `${safeName}.json`);
+    }
+  }
+
+  return new PersistentSessionStore();
 }
 
 const fleet = new MultiServerManager({
@@ -46,6 +90,7 @@ app.use(
   session({
     name: "bedrock_panel",
     secret: sessionSecret,
+    store: createFileSessionStore(sessionDir),
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -55,6 +100,7 @@ app.use(
     }
   })
 );
+app.use(csrfProtection);
 
 function requireAuth(req, res, next) {
   if (req.session?.authenticated) return next();
@@ -77,6 +123,22 @@ function securityHeaders(_req, res, next) {
   res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
   next();
 }
+
+function csrfProtection(req, res, next) {
+  if (req.session && !req.session.csrfToken) {
+    req.session.csrfToken = crypto.randomBytes(32).toString("base64url");
+  }
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method) || req.path === "/login") return next();
+  if (!req.session?.authenticated) return next();
+  const token = String(req.get("x-csrf-token") || req.body?._csrf || req.query?._csrf || "");
+  if (safeCompare(token, req.session.csrfToken || "")) return next();
+  return res.status(403).json({ error: "Token CSRF invalide." });
+}
+
+app.get("/assets/lucide.min.js", (_req, res) => {
+  res.setHeader("Cache-Control", "public, max-age=604800, immutable");
+  res.sendFile(path.join(rootDir, "node_modules", "lucide", "dist", "umd", "lucide.min.js"));
+});
 
 app.get("/login", (req, res) => {
   if (req.session?.authenticated) return res.redirect("/");
@@ -102,8 +164,8 @@ app.post("/logout", requireAuth, (req, res) => {
   req.session.destroy(() => res.redirect("/login"));
 });
 
-app.get("/", requireAuth, (_req, res) => {
-  res.type("html").send(panelHtml());
+app.get("/", requireAuth, (req, res) => {
+  res.type("html").send(panelHtml(req.session.csrfToken));
 });
 
 app.get("/api/servers", requireAuth, asyncRoute(async (_req, res) => {
@@ -131,6 +193,8 @@ app.patch("/api/servers/:id", requireAuth, asyncRoute(async (req, res) => {
 }));
 
 app.delete("/api/servers/:id", requireAuth, asyncRoute(async (req, res) => {
+  const server = fleet.require(req.params.id).meta;
+  requireConfirmation(req, server.name);
   await fleet.delete(req.params.id);
   res.json({ ok: true });
 }));
@@ -159,6 +223,7 @@ app.post("/api/servers/:id/restart", requireAuth, asyncRoute(async (req, res) =>
 }));
 
 app.post("/api/servers/:id/reinstall", requireAuth, asyncRoute(async (req, res) => {
+  requireConfirmation(req, "REINSTALL");
   const result = await serverFrom(req).reinstall();
   res.json({ ok: true, ...result });
 }));
@@ -187,7 +252,7 @@ app.get("/api/servers/:id/properties-form", requireAuth, asyncRoute(async (req, 
 app.put("/api/servers/:id/properties-form", requireAuth, asyncRoute(async (req, res) => {
   const manager = serverFrom(req);
   const current = await manager.readProperties();
-  await manager.writeProperties(mergeProperties(current, req.body.values || {}));
+  await manager.writeProperties(mergeProperties(current, normalizePropertyPatch(req.body.values || {})));
   res.json({ ok: true });
 }));
 
@@ -210,7 +275,9 @@ app.post("/api/servers/:id/directory", requireAuth, asyncRoute(async (req, res) 
 }));
 
 app.delete("/api/servers/:id/file", requireAuth, asyncRoute(async (req, res) => {
-  await serverFrom(req).deleteFile(String(req.query.path || ""));
+  const target = String(req.query.path || "");
+  requireConfirmation(req, target);
+  await serverFrom(req).deleteFile(target);
   res.json({ ok: true });
 }));
 
@@ -229,18 +296,20 @@ app.get("/api/servers/:id/backups/:name", requireAuth, asyncRoute(async (req, re
 }));
 
 app.post("/api/servers/:id/backups/:name/restore", requireAuth, asyncRoute(async (req, res) => {
+  requireConfirmation(req, "RESTORE");
   await serverFrom(req).restoreBackup(req.params.name);
   res.json({ ok: true });
 }));
 
 app.delete("/api/servers/:id/backups/:name", requireAuth, asyncRoute(async (req, res) => {
+  requireConfirmation(req, req.params.name);
   await serverFrom(req).deleteBackup(req.params.name);
   res.json({ ok: true });
 }));
 
 app.use((err, _req, res, _next) => {
   console.error(err);
-  res.status(500).json({ error: err.message || "Erreur serveur" });
+  res.status(err.status || 500).json({ error: err.message || "Erreur serveur" });
 });
 
 if (usingGeneratedPassword) {
@@ -289,14 +358,14 @@ function loginHtml(error = "") {
 </html>`;
 }
 
-function panelHtml() {
+function panelHtml(csrfToken = "") {
   return `<!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Bedrock Host Panel</title>
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="/assets/lucide.min.js"></script>
   <style>
     :root { --ink:#f7f8ff; --muted:#a8afc9; --bg:#111522; --panel:#272c42; --panel-2:#303650; --panel-3:#1c2234; --line:#394059; --blue:#5b8cff; --blue-2:#223763; --red:#ff5d62; --green:#54d18a; --amber:#f2b85b; --code:#111521; --soft:#202842; }
     * { box-sizing:border-box; }
@@ -433,7 +502,7 @@ function panelHtml() {
           <div class="actions">
             <span id="globalPill" class="pill off"><i data-lucide="server"></i><span>...</span></span>
             <button class="icon" id="refreshServers" title="Actualiser"><i data-lucide="refresh-cw"></i></button>
-            <form method="post" action="/logout"><button type="submit"><i data-lucide="log-out"></i>Sortir</button></form>
+            <form method="post" action="/logout"><input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}"><button type="submit"><i data-lucide="log-out"></i>Sortir</button></form>
           </div>
         </div>
 
@@ -486,7 +555,7 @@ function panelHtml() {
             <button class="primary" id="startBtn"><i data-lucide="play"></i>Démarrer</button>
             <button class="amber" id="restartBtn"><i data-lucide="rotate-cw"></i>Redémarrer</button>
             <button class="red" id="stopBtn"><i data-lucide="square"></i>Stop</button>
-            <form method="post" action="/logout"><button type="submit"><i data-lucide="log-out"></i>Sortir</button></form>
+            <form method="post" action="/logout"><input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}"><button type="submit"><i data-lucide="log-out"></i>Sortir</button></form>
           </div>
         </div>
         <div class="tabs-nav">
@@ -656,6 +725,7 @@ function panelHtml() {
 
 <script>
 const $ = (id) => document.getElementById(id);
+const CSRF_TOKEN = "${escapeJs(csrfToken)}";
 let servers = [];
 let activeId = localStorage.getItem("bedrockActiveServer") || "";
 let viewMode = "overview";
@@ -666,8 +736,11 @@ let currentFilePath = "";
 let selectedFilePath = "";
 
 async function api(path, options = {}) {
+  const method = String(options.method || "GET").toUpperCase();
+  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  if (!["GET", "HEAD", "OPTIONS"].includes(method)) headers["x-csrf-token"] = CSRF_TOKEN;
   const res = await fetch(path, {
-    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
+    headers,
     ...options
   });
   const text = await res.text();
@@ -1003,6 +1076,11 @@ function parentPath(path) {
   return parts.join("/");
 }
 
+function requireTypedConfirmation(message, expected) {
+  const value = prompt(message + "\\n\\nTape exactement: " + expected);
+  return value === expected;
+}
+
 async function action(label, fn, options = {}) {
   if (busy || (!activeId && !options.allowNoActive)) return;
   setBusy(true);
@@ -1032,8 +1110,8 @@ $("overviewStartBtn").onclick = () => action("Serveur démarré.", () => api(end
 $("overviewStopBtn").onclick = () => action("Serveur arrêté.", () => api(endpoint("/stop"), { method:"POST" }));
 $("overviewRestartBtn").onclick = () => action("Serveur redémarré.", () => api(endpoint("/restart"), { method:"POST" }));
 $("reinstallBtn").onclick = () => {
-  if (!confirm("Réinstaller ce serveur et créer une sauvegarde avant ?")) return;
-  action("Réinstallation terminée.", () => api(endpoint("/reinstall"), { method:"POST" }));
+  if (!requireTypedConfirmation("Reinstaller ce serveur et creer une sauvegarde avant ?", "REINSTALL")) return;
+  action("Reinstallation terminee.", () => api(endpoint("/reinstall"), { method:"POST", body: JSON.stringify({ confirm: "REINSTALL" }) }));
 };
 $("sendCommand").onclick = () => {
   const command = $("commandInput").value.trim();
@@ -1062,9 +1140,9 @@ $("saveServer").onclick = () => action("Serveur modifié.", () => api(endpoint("
 $("deleteServer").onclick = () => {
   const server = activeServer();
   if (!server) return;
-  if (!confirm("Supprimer " + server.name + " avec ses fichiers et sauvegardes ?")) return;
+  if (!requireTypedConfirmation("Supprimer " + server.name + " avec ses fichiers et sauvegardes ?", server.name)) return;
   action("Serveur supprimé.", async () => {
-    await api(endpoint(""), { method:"DELETE" });
+    await api(endpoint(""), { method:"DELETE", body: JSON.stringify({ confirm: server.name }) });
     activeId = "";
     viewMode = "overview";
     localStorage.removeItem("bedrockActiveServer");
@@ -1110,8 +1188,8 @@ $("saveFile").onclick = () => {
 };
 $("deleteFile").onclick = () => {
   if (!selectedFilePath) return toast("Sélectionne un fichier.");
-  if (!confirm("Supprimer " + selectedFilePath + " ?")) return;
-  action("Fichier supprimé.", () => api(endpoint("/file?path=") + encodeURIComponent(selectedFilePath), { method:"DELETE" }).then(() => {
+  if (!requireTypedConfirmation("Supprimer " + selectedFilePath + " ?", selectedFilePath)) return;
+  action("Fichier supprime.", () => api(endpoint("/file?path=") + encodeURIComponent(selectedFilePath), { method:"DELETE", body: JSON.stringify({ confirm: selectedFilePath }) }).then(() => {
     selectedFilePath = "";
     $("fileEditorPath").value = "";
     $("fileEditor").value = "";
@@ -1120,12 +1198,12 @@ $("deleteFile").onclick = () => {
 };
 
 window.restoreBackup = (name) => {
-  if (!confirm("Restaurer " + name + " ? Le serveur sera arrêté pendant la restauration.")) return;
-  action("Sauvegarde restaurée.", () => api(endpoint("/backups/") + encodeURIComponent(name) + "/restore", { method:"POST" }));
+  if (!requireTypedConfirmation("Restaurer " + name + " ? Le serveur sera arrete pendant la restauration.", "RESTORE")) return;
+  action("Sauvegarde restauree.", () => api(endpoint("/backups/") + encodeURIComponent(name) + "/restore", { method:"POST", body: JSON.stringify({ confirm: "RESTORE" }) }));
 };
 window.deleteBackup = (name) => {
-  if (!confirm("Supprimer " + name + " ?")) return;
-  action("Sauvegarde supprimée.", () => api(endpoint("/backups/") + encodeURIComponent(name), { method:"DELETE" }));
+  if (!requireTypedConfirmation("Supprimer " + name + " ?", name)) return;
+  action("Sauvegarde supprimee.", () => api(endpoint("/backups/") + encodeURIComponent(name), { method:"DELETE", body: JSON.stringify({ confirm: name }) }));
 };
 
 lucide.createIcons();
@@ -1155,6 +1233,67 @@ function safeCompare(left, right) {
   const leftHash = crypto.createHash("sha256").update(String(left)).digest();
   const rightHash = crypto.createHash("sha256").update(String(right)).digest();
   return crypto.timingSafeEqual(leftHash, rightHash);
+}
+
+function escapeJs(value) {
+  return String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("</", "<\\/");
+}
+
+function requireConfirmation(req, expected) {
+  const provided = String(req.body?.confirm || "");
+  if (!expected || !safeCompare(provided, expected)) {
+    throw httpError(400, "Confirmation requise.");
+  }
+}
+
+function normalizePropertyPatch(values) {
+  return {
+    "server-name": cleanText(values["server-name"], 80, "Dedicated Server"),
+    "level-name": cleanText(values["level-name"], 80, "Bedrock level"),
+    gamemode: enumValue(values.gamemode, ["survival", "creative", "adventure"], "survival"),
+    difficulty: enumValue(values.difficulty, ["peaceful", "easy", "normal", "hard"], "easy"),
+    "max-players": String(clampInt(values["max-players"], 1, 1000, 10)),
+    "allow-cheats": boolText(values["allow-cheats"], "false"),
+    "online-mode": boolText(values["online-mode"], "true"),
+    "allow-list": boolText(values["allow-list"], "false"),
+    "force-gamemode": boolText(values["force-gamemode"], "false"),
+    "enable-lan-visibility": boolText(values["enable-lan-visibility"], "false"),
+    "view-distance": String(clampInt(values["view-distance"], 2, 96, 32)),
+    "tick-distance": String(clampInt(values["tick-distance"], 2, 12, 4))
+  };
+}
+
+function cleanText(value, maxLength, fallback) {
+  const text = String(value || "").replace(/[\r\n]/g, " ").trim().slice(0, maxLength);
+  return text || fallback;
+}
+
+function enumValue(value, allowed, fallback) {
+  const text = String(value || "").toLowerCase();
+  return allowed.includes(text) ? text : fallback;
+}
+
+function boolText(value, fallback) {
+  return String(value || fallback).toLowerCase() === "true" ? "true" : "false";
+}
+
+function clampInt(value, min, max, fallback) {
+  const number = Number.parseInt(value, 10);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function httpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function defaultSessionDir(rootDir) {
+  if (process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID) {
+    return "/data/panel/sessions";
+  }
+  return path.join(rootDir, ".panel", "sessions");
 }
 
 function isLoginLimited(ip) {
