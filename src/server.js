@@ -532,11 +532,6 @@ function panelHtml(csrfToken = "") {
                     <input id="newPort" type="number" min="1" max="65534">
                   </div>
                 </div>
-                <div>
-                  <label for="templateServer">Template</label>
-                  <select id="templateServer"></select>
-                </div>
-                <label class="checkrow"><input id="newAutoStart" type="checkbox"> Auto-start</label>
                 <button class="primary" id="createServer"><i data-lucide="plus"></i>Créer</button>
               </div>
             </div>
@@ -802,7 +797,7 @@ async function refreshServers() {
   }
   renderGlobalPill();
   renderServerGallery();
-  renderTemplateOptions();
+  renderCreateDefaults();
   renderView();
   if (viewMode === "detail" && activeId) {
     await refreshActive();
@@ -891,10 +886,7 @@ function showOverview() {
   refreshServers().catch((error) => toast(error.message));
 }
 
-function renderTemplateOptions() {
-  $("templateServer").innerHTML = servers.map((server) =>
-    '<option value="' + escapeHtmlClient(server.id) + '">' + escapeHtmlClient(server.name) + '</option>'
-  ).join("");
+function renderCreateDefaults() {
   const nextPort = nextFreePort();
   if (!$("newPort").value) $("newPort").value = nextPort;
 }
@@ -1183,9 +1175,7 @@ $("createServer").onclick = () => {
       method:"POST",
       body: JSON.stringify({
         name: $("newName").value,
-        port: $("newPort").value,
-        autoStart: $("newAutoStart").checked,
-        templateServerId: $("templateServer").value
+        port: $("newPort").value
       })
     });
     activeId = data.server.id;
