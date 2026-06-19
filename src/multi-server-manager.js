@@ -150,6 +150,7 @@ export class MultiServerManager {
     }
     if (input.resources) {
       meta.resources = normalizeResources(input.resources);
+      await updateProperties(manager, { performance:meta.resources });
     }
     if (input.backupPolicy) meta.backupPolicy = normalizeBackupPolicy(input.backupPolicy);
     if (input.port !== undefined && input.port !== "") {
@@ -320,6 +321,11 @@ async function updateProperties(manager, patch) {
     content = setProperty(content, "server-portv6", String(patch.port + 1));
     content = setProperty(content, "enable-lan-visibility", "false");
   }
+  if (patch.performance) {
+    content = setProperty(content, "max-threads", String(Math.max(1, Math.round(patch.performance.cpuCores))));
+    content = setProperty(content, "view-distance", String(patch.performance.viewDistance));
+    content = setProperty(content, "tick-distance", String(patch.performance.tickDistance));
+  }
   await manager.writeProperties(content);
 }
 
@@ -365,7 +371,16 @@ function publicServer(server) {
 }
 
 function defaultResources() {
-  return { ramMb: 2048, cpuCores: 1, storageGb: 5 };
+  return performancePreset("balanced");
+}
+
+export function performancePreset(profile) {
+  const presets = {
+    economy: { performanceProfile:"economy", ramMb:1024, cpuCores:1, storageGb:5, viewDistance:12, tickDistance:4 },
+    balanced: { performanceProfile:"balanced", ramMb:2048, cpuCores:2, storageGb:10, viewDistance:24, tickDistance:6 },
+    performance: { performanceProfile:"performance", ramMb:4096, cpuCores:4, storageGb:20, viewDistance:32, tickDistance:8 }
+  };
+  return { ...(presets[profile] || presets.balanced) };
 }
 
 function defaultBackupPolicy() {
@@ -382,11 +397,17 @@ function normalizeBackupPolicy(policy) {
 }
 
 function normalizeResources(resources) {
-  const defaults = defaultResources();
+  const allowedProfiles = new Set(["economy", "balanced", "performance", "custom"]);
+  const profile = allowedProfiles.has(resources.performanceProfile) ? resources.performanceProfile : "balanced";
+  if (profile !== "custom") return performancePreset(profile);
+  const defaults = performancePreset("balanced");
   return {
+    performanceProfile: "custom",
     ramMb: clampInt(resources.ramMb, 256, 131072, defaults.ramMb),
     cpuCores: clampNumber(resources.cpuCores, 0.25, 64, defaults.cpuCores),
-    storageGb: clampInt(resources.storageGb, 1, 4096, defaults.storageGb)
+    storageGb: clampInt(resources.storageGb, 1, 4096, defaults.storageGb),
+    viewDistance: clampInt(resources.viewDistance, 5, 96, defaults.viewDistance),
+    tickDistance: clampInt(resources.tickDistance, 4, 12, defaults.tickDistance)
   };
 }
 

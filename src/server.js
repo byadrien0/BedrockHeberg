@@ -878,6 +878,17 @@ function panelHtml(csrfToken = "") {
                 </div>
               </div>
               <label class="checkrow" data-requires-first-run><input id="serverAutoStart" type="checkbox"> Démarrage automatique</label>
+              <div class="install-panel" style="margin-top:16px">
+                <div class="row"><strong>Performances</strong><span class="badge" id="performanceBadge">Équilibré</span></div>
+                <div class="form-grid">
+                  <div><label for="performanceProfile">Profil</label><select id="performanceProfile"><option value="economy">Économie</option><option value="balanced">Équilibré</option><option value="performance">Performance</option><option value="custom">Personnalisé</option></select></div>
+                  <div><label for="resourceRam">RAM allouée (Mo)</label><input id="resourceRam" type="number" min="256" max="131072" step="256" title="Budget RAM du serveur Bedrock"></div>
+                  <div><label for="resourceCpu">Cœurs CPU</label><input id="resourceCpu" type="number" min="0.25" max="64" step="0.25"></div>
+                  <div><label for="resourceStorage">Stockage maximal (Go)</label><input id="resourceStorage" type="number" min="1" max="4096"></div>
+                  <div><label for="resourceViewDistance">Distance d’affichage</label><input id="resourceViewDistance" type="number" min="5" max="96"></div>
+                  <div><label for="resourceTickDistance">Distance de simulation</label><input id="resourceTickDistance" type="number" min="4" max="12"></div>
+                </div>
+              </div>
             </div>
           </section>
 
@@ -1399,6 +1410,7 @@ function renderActive() {
     $("serverName").value = "";
     $("serverPort").value = "";
     $("serverAutoStart").checked = false;
+    setPerformanceForm({ performanceProfile:"balanced" });
     $("statePill").className = "pill off";
     $("statePill").querySelector("span").textContent = "Aucun";
     ["serverVersion", "serverUptime", "playerCount", "diskUsage", "lastBackup", "serverAddress", "publicAddress", "networkState", "lastServerError"].forEach((id) => { $(id).textContent = "-"; });
@@ -1417,6 +1429,7 @@ function renderActive() {
   $("serverName").value = server.name;
   $("serverPort").value = status.gamePort || "";
   $("serverAutoStart").checked = Boolean(server.autoStart);
+  setPerformanceForm(server.resources || { performanceProfile:"balanced" });
   ["startBtn", "restartBtn", "stopBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile", "installServer", "updateServer"].forEach((id) => {
     $(id).disabled = false;
   });
@@ -1625,6 +1638,33 @@ function collectPropertyForm() {
 
 function normalizeBool(value, fallback) {
   return String(value || fallback).toLowerCase() === "true" ? "true" : "false";
+}
+
+const PERFORMANCE_PRESETS = {
+  economy:{ ramMb:1024, cpuCores:1, storageGb:5, viewDistance:12, tickDistance:4 },
+  balanced:{ ramMb:2048, cpuCores:2, storageGb:10, viewDistance:24, tickDistance:6 },
+  performance:{ ramMb:4096, cpuCores:4, storageGb:20, viewDistance:32, tickDistance:8 }
+};
+
+function setPerformanceForm(resources) {
+  const profile = resources.performanceProfile || "balanced";
+  const values = { ...PERFORMANCE_PRESETS.balanced, ...(PERFORMANCE_PRESETS[profile] || {}), ...resources };
+  $("performanceProfile").value = profile;
+  $("resourceRam").value = values.ramMb;
+  $("resourceCpu").value = values.cpuCores;
+  $("resourceStorage").value = values.storageGb;
+  $("resourceViewDistance").value = values.viewDistance;
+  $("resourceTickDistance").value = values.tickDistance;
+  $("performanceBadge").textContent = { economy:"Économie", balanced:"Équilibré", performance:"Performance", custom:"Personnalisé" }[profile];
+}
+
+function collectPerformanceForm() {
+  return {
+    performanceProfile:$("performanceProfile").value,
+    ramMb:Number($("resourceRam").value), cpuCores:Number($("resourceCpu").value),
+    storageGb:Number($("resourceStorage").value), viewDistance:Number($("resourceViewDistance").value),
+    tickDistance:Number($("resourceTickDistance").value)
+  };
 }
 
 function serverAddress(status) {
@@ -1949,9 +1989,17 @@ $("saveServer").onclick = () => action("Serveur modifié.", () => api(endpoint("
   body: JSON.stringify({
     name: $("serverName").value,
     port: $("serverPort").value,
-    autoStart: $("serverAutoStart").checked
+    autoStart: $("serverAutoStart").checked,
+    resources: collectPerformanceForm()
   })
 }));
+$("performanceProfile").onchange = () => {
+  const profile = $("performanceProfile").value;
+  setPerformanceForm({ performanceProfile:profile, ...(PERFORMANCE_PRESETS[profile] || collectPerformanceForm()) });
+};
+["resourceRam", "resourceCpu", "resourceStorage", "resourceViewDistance", "resourceTickDistance"].forEach((id) => {
+  $(id).oninput = () => { $("performanceProfile").value = "custom"; $("performanceBadge").textContent = "Personnalisé"; };
+});
 $("deleteServer").onclick = () => {
   const server = activeServer();
   if (!server) return;

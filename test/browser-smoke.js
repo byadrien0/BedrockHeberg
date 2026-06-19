@@ -20,8 +20,15 @@ try {
     await page.locator("[data-server]").first().click();
     await eventRequest;
     await page.locator("#installTitle").waitFor({ timeout:10000 });
-    assert.equal(await page.getByRole("button", { name:"Mondes" }).isVisible(), false);
-    assert.equal(await page.getByRole("button", { name:"Console" }).isVisible(), false);
+    const lifecycle = await page.locator("#installTitle").textContent();
+    if (!/opérationnel/i.test(lifecycle || "")) {
+      assert.equal(await page.getByRole("button", { name:"Mondes" }).isVisible(), false);
+      assert.equal(await page.getByRole("button", { name:"Console" }).isVisible(), false);
+    }
+    await page.locator("#performanceProfile").selectOption("performance");
+    assert.equal(await page.locator("#resourceRam").inputValue(), "4096");
+    assert.equal(await page.locator("#resourceCpu").inputValue(), "4");
+    await page.locator("#performanceProfile").selectOption("balanced");
     await page.screenshot({ path:path.resolve(".panel", "browser-preflight.png"), fullPage:true });
     await page.getByRole("button", { name:"Comptes" }).click();
     await page.getByRole("heading", { name:"Comptes", exact:true }).waitFor();

@@ -8,6 +8,7 @@ import {
   MultiServerManager,
   cleanName,
   normalizeResources,
+  performancePreset,
   setProperty,
   slugify,
   validatePort
@@ -37,11 +38,20 @@ test("setProperty updates existing values and adds missing values", () => {
 });
 
 test("normalizeResources clamps metadata to supported bounds", () => {
-  assert.deepEqual(normalizeResources({ ramMb: 1, cpuCores: 100, storageGb: "bad" }), {
+  assert.deepEqual(normalizeResources({ performanceProfile:"custom", ramMb:1, cpuCores:100, storageGb:"bad", viewDistance:200, tickDistance:1 }), {
+    performanceProfile: "custom",
     ramMb: 256,
     cpuCores: 64,
-    storageGb: 5
+    storageGb: 10,
+    viewDistance: 96,
+    tickDistance: 4
   });
+});
+
+test("performance profiles provide coherent Bedrock limits", () => {
+  assert.deepEqual(normalizeResources({ performanceProfile:"performance", ramMb:512 }), performancePreset("performance"));
+  assert.equal(performancePreset("balanced").cpuCores, 2);
+  assert.equal(performancePreset("balanced").ramMb, 2048);
 });
 
 test("server registry writes replace an existing JSON file cleanly", async () => {
@@ -50,6 +60,9 @@ test("server registry writes replace an existing JSON file cleanly", async () =>
     const manager = new MultiServerManager({ rootDir, autoStart: false });
     await manager.initialize();
     assert.equal(await manager.requireManager("principal").readProperty("server-port"), "19132");
+    await manager.update("principal", { resources:{ performanceProfile:"performance" } });
+    assert.equal(await manager.requireManager("principal").readProperty("max-threads"), "4");
+    assert.equal(await manager.requireManager("principal").readProperty("view-distance"), "32");
     manager.servers[0].name = "Serveur test";
     await manager.saveConfig();
 
