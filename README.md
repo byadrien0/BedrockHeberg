@@ -145,6 +145,8 @@ test/                     tests métier, API et navigateur
 
 Ces dossiers d'exécution sont exclus par `.gitignore`.
 
+La commande `npm run check:repository` vérifie la liste réellement suivie par Git et refuse les binaires Bedrock, mondes, sauvegardes, secrets, comptes, sessions, journaux et archives. Elle est également exécutée automatiquement avant la suite de tests.
+
 ## Scripts
 
 ```bash

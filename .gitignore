@@ -27,4 +27,11 @@ release-notes.txt
 *.mcpack
 *.mcaddon
 .env
+.env.*
+!.env.example
+**/runtime-secrets.json
+**/users.json
+**/activity.json
+**/sessions/
+*.db
 packet-statistics.txt

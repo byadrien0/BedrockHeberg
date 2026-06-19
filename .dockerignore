@@ -1,6 +1,9 @@
 .git
 node_modules
 npm-debug.log
+*.log
+.env
+.env.*
 .panel
 servers
 behavior_packs

@@ -11,6 +11,8 @@
   "type": "module",
   "scripts": {
     "check": "node --check src/server.js && node --check src/bedrock-manager.js && node --check src/multi-server-manager.js && node --check src/activity-store.js && node --check src/user-store.js",
+    "check:repository": "git ls-files -z | node scripts/check-repository.js",
+    "pretest": "npm run check:repository",
     "test": "node test/run-tests.js",
     "test:api": "node test/api-smoke.js",
     "test:browser": "node test/browser-smoke.js",
