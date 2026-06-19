@@ -1,8 +1,13 @@
 FROM node:20-bookworm-slim
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ca-certificates libcurl4 libssl3 libstdc++6 \
+  && apt-get install -y --no-install-recommends ca-certificates curl libcurl4 libssl3 libstdc++6 \
   && rm -rf /var/lib/apt/lists/*
+
+ARG PLAYIT_VERSION=1.0.10
+RUN curl -fsSL "https://github.com/playit-cloud/playit-agent/releases/download/v${PLAYIT_VERSION}/playit-linux-amd64" -o /usr/local/bin/playit \
+  && echo "2df7d9f10227ab312b1ad341853db4e8a8243df5cfcdbae58713a4271711c339  /usr/local/bin/playit" | sha256sum -c - \
+  && chmod 0755 /usr/local/bin/playit
 
 WORKDIR /app
 

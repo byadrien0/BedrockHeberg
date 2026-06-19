@@ -10,6 +10,7 @@ import multer from "multer";
 import { MultiServerManager } from "./multi-server-manager.js";
 import { ActivityStore } from "./activity-store.js";
 import { UserStore } from "./user-store.js";
+import { PlayitManager } from "./playit-manager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
@@ -26,6 +27,12 @@ const activity = new ActivityStore(path.join(path.dirname(sessionDir), "activity
 await activity.initialize();
 const users = new UserStore(path.join(path.dirname(sessionDir), "users.json"));
 await users.initialize(adminPassword, { resetSoleAdminPassword:usingGeneratedPassword && runtimeSecrets.created });
+const playit = new PlayitManager({
+  secret:process.env.PLAYIT_SECRET || process.env.SECRET_KEY,
+  address:process.env.PLAYIT_ADDRESS,
+  binary:process.env.PLAYIT_BIN
+});
+playit.start();
 const upload = multer({ dest: path.join(os.tmpdir(), "bedrock-panel-uploads"), limits: { fileSize: 1024 * 1024 * 1024 } });
 
 function createFileSessionStore(dir) {
@@ -226,7 +233,7 @@ app.delete("/api/servers/:id", requireAuth, asyncRoute(async (req, res) => {
 }));
 
 app.get("/api/servers/:id/status", requireAuth, asyncRoute(async (req, res) => {
-  res.json(await serverFrom(req).status());
+  res.json({ ...(await serverFrom(req).status()), playit:playit.status() });
 }));
 
 app.get("/api/servers/:id/logs", requireAuth, (req, res) => {
@@ -1567,9 +1574,13 @@ function renderActive() {
   $("resourceAllocation").textContent = (server.resources?.ramMb || 2048) + " Mo · " + (server.resources?.cpuCores || 2) + " cœur(s)";
   $("lastBackup").textContent = status.lastBackup ? formatDate(status.lastBackup.createdAt) : "Aucune";
   $("serverAddress").textContent = status.network?.localAddress || serverAddress(status);
-  $("publicAddress").textContent = status.network?.publicAddress || "Non configurée";
+  $("publicAddress").textContent = status.network?.publicAddress || (status.playit?.running ? "À configurer sur Playit.gg" : "Non configurée");
   const networkLabels = { "expected-open":"En écoute", closed:"Fermé", "in-use":"Port utilisé" };
-  $("networkState").textContent = networkLabels[status.network?.udpState] || "Inconnu";
+  $("networkState").textContent = status.playit?.enabled
+    ? (status.playit.running
+      ? (status.network?.publicAddress ? "Tunnel Playit actif" : "Agent Playit actif")
+      : (status.playit.state === "starting" ? "Connexion à Playit" : "Erreur Playit"))
+    : (networkLabels[status.network?.udpState] || "Inconnu");
   $("lastServerError").textContent = status.lastError || status.error || "Aucune";
   $("lastErrorMetric").classList.toggle("hidden", !status.lastError && !status.error);
   $("backupEnabled").value = String(Boolean(server.backupPolicy?.enabled));

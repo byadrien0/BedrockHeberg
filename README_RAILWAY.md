@@ -31,6 +31,8 @@ SERVERS_DIR=/data/servers
 BACKUP_ROOT=/data/backups
 SEED_DIR=/opt/bedrock-seed
 PUBLIC_IP=adresse-publique-optionnelle
+PLAYIT_SECRET=cle-agent-playit
+PLAYIT_ADDRESS=adresse-playit-et-port
 ```
 
 Monte un volume Railway sur `/data`, sinon les mondes, la liste des serveurs et les sauvegardes peuvent disparaitre a chaque redeploiement.
@@ -41,7 +43,7 @@ Le repo ne versionne plus le serveur Bedrock extrait, les mondes, les packs vani
 
 L'interface web utilise le port HTTP fourni par Railway via `PORT`.
 
-Minecraft Bedrock utilise UDP. Chaque serveur doit avoir son propre port, par exemple `19132`, `19134`, `19136`. Le Dockerfile declare `19132` et `19133`, mais Railway Public Networking expose surtout HTTP/HTTPS. Si ton projet Railway ne propose pas d'exposition UDP publique, les joueurs ne pourront pas rejoindre directement les serveurs Bedrock depuis Railway. Dans ce cas, utilise un hebergement qui expose UDP publiquement, ou ajoute un tunnel UDP compatible Bedrock.
+Minecraft Bedrock utilise UDP. Chaque serveur doit avoir son propre port, par exemple `19132`, `19134`, `19136`. Railway Public Networking ne publie pas directement ces ports UDP pour Minecraft. ServerAura embarque donc l'agent Playit.gg: ajoute `PLAYIT_SECRET`, cree un tunnel Bedrock UDP vers `127.0.0.1:19132`, puis renseigne son adresse publique dans `PLAYIT_ADDRESS`.
 
 ## Deploiement
 

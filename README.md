@@ -126,6 +126,10 @@ Minecraft Bedrock Dedicated Server n'est officiellement fourni que pour Windows 
 | `BACKUP_ROOT` | non | dossier local ou `/data/backups` | Racine des sauvegardes |
 | `SEED_DIR` | non | racine du projet | Modèle initial facultatif |
 | `PUBLIC_IP` | non | vide | Adresse publique affichée dans le panneau |
+| `PLAYIT_SECRET` | sur Railway | vide | Clé secrète de l'agent Playit.gg |
+| `PLAYIT_ADDRESS` | non | vide | Adresse publique du tunnel du serveur principal |
+| `PLAYIT_LOCAL_PORT` | non | `19132` | Port local correspondant à `PLAYIT_ADDRESS` |
+| `PLAYIT_TUNNELS` | non | `{}` | Objet JSON associant chaque port Bedrock à son adresse Playit |
 | `BDS_DOWNLOAD_URL` | non | manifeste officiel | Archive Bedrock imposée manuellement |
 
 Ne publie jamais `.env`, les secrets de session, les mondes ou les sauvegardes dans Git.
@@ -179,7 +183,28 @@ Chaque serveur supplémentaire doit utiliser un port UDP distinct et ce port doi
 
 Le dépôt contient un `Dockerfile` et un fichier `railway.json`. Monte impérativement un volume persistant sur `/data`, puis configure au minimum `ADMIN_PASSWORD` et `SESSION_SECRET`.
 
-Railway expose facilement le panneau HTTP, mais l'accès public à Minecraft nécessite une exposition UDP. Vérifie que l'offre et la configuration réseau choisies prennent en charge les ports UDP avant de retenir cette plateforme pour le serveur de jeu.
+Railway expose le panneau HTTP, mais pas directement le port UDP attendu par Minecraft Bedrock. L'agent Playit inclus dans ServerAura établit une connexion sortante et fournit l'adresse publique nécessaire au jeu.
+
+### Tunnel UDP Playit.gg sur Railway
+
+ServerAura embarque l'agent officiel Playit.gg dans son image Docker. Pour rendre un serveur Bedrock Railway accessible :
+
+1. Crée une clé d'agent depuis l'[assistant de configuration Docker Playit.gg](https://playit.gg/account/setup/wizard/new-account/docker/docker-name).
+2. Dans Railway, ouvre le service ServerAura puis **Variables**.
+3. Ajoute `PLAYIT_SECRET` avec la clé fournie par Playit. Ne la place jamais dans Git.
+4. Redéploie le service et vérifie dans les logs la ligne `Agent Playit demarre`.
+5. Dans le tableau de bord Playit, crée un tunnel **Minecraft Bedrock / UDP**.
+6. Configure l'adresse locale du tunnel sur `127.0.0.1:19132`.
+7. Copie l'adresse publique et le port attribués par Playit dans une variable Railway `PLAYIT_ADDRESS`, par exemple `exemple.gl.joinmc.link:24567`.
+8. Redéploie une dernière fois puis utilise cette adresse et ce port dans Minecraft.
+
+Pour plusieurs serveurs, crée un tunnel UDP par port puis utilise `PLAYIT_TUNNELS` :
+
+```json
+{"19132":"survie.gl.joinmc.link:24567","19134":"creatif.gl.joinmc.link:25123"}
+```
+
+Dans les variables Railway, le JSON doit être saisi sur une seule ligne. `PLAYIT_ADDRESS` reste la valeur de secours pour le serveur principal.
 
 Les instructions détaillées sont disponibles dans [README_RAILWAY.md](README_RAILWAY.md).
 

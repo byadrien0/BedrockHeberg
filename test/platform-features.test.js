@@ -6,8 +6,9 @@ import os from "node:os";
 import path from "node:path";
 import archiver from "archiver";
 import { ActivityStore } from "../src/activity-store.js";
-import { BedrockManager, bedrockDownloadUrlFromHtml, bedrockDownloadUrlFromManifest } from "../src/bedrock-manager.js";
+import { BedrockManager, bedrockDownloadUrlFromHtml, bedrockDownloadUrlFromManifest, playitAddressForPort } from "../src/bedrock-manager.js";
 import { normalizeBackupPolicy } from "../src/multi-server-manager.js";
+import { PlayitManager } from "../src/playit-manager.js";
 import { UserStore, totp } from "../src/user-store.js";
 
 test("official Bedrock links select the current operating system", () => {
@@ -24,6 +25,22 @@ test("official Bedrock links select the current operating system", () => {
   ].join(" ");
   assert.match(bedrockDownloadUrlFromHtml(html, "win32"), /bin-win/);
   assert.match(bedrockDownloadUrlFromHtml(html, "linux"), /bin-linux/);
+});
+
+test("Playit configuration selects a tunnel per Bedrock port", () => {
+  const environment = {
+    PLAYIT_ADDRESS:"principal.gl.joinmc.link:20000",
+    PLAYIT_TUNNELS:JSON.stringify({ 19134:"creatif.gl.joinmc.link:21000" })
+  };
+  assert.equal(playitAddressForPort(19132, environment), environment.PLAYIT_ADDRESS);
+  assert.equal(playitAddressForPort(19134, environment), "creatif.gl.joinmc.link:21000");
+  assert.equal(playitAddressForPort(19136, environment), "");
+  const disabled = new PlayitManager();
+  assert.equal(disabled.status().state, "disabled");
+  const secured = new PlayitManager({ secret:"private-agent-key" });
+  secured.appendLog("connected with private-agent-key");
+  assert.equal(secured.logs[0], "connected with [secret]");
+  assert.equal("secret" in secured.status(), false);
 });
 
 test("operation queue reports progress and rejects duplicate queued work", async () => {

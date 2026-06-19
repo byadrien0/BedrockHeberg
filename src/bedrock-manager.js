@@ -485,12 +485,17 @@ export class BedrockManager {
 
   async networkStatus(port) {
     const available = await udpPortAvailable(port);
-    const publicHost = process.env.PUBLIC_IP || process.env.RAILWAY_PUBLIC_DOMAIN || "";
+    const tunnelAddress = playitAddressForPort(port);
+    const publicHost = process.env.PUBLIC_IP || "";
+    const isRailway = Boolean(process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID);
     return {
       localAddress: `${localAddresses()[0] || "127.0.0.1"}:${port}`,
-      publicAddress: publicHost ? `${publicHost}:${port}` : "",
+      publicAddress: tunnelAddress || (publicHost ? `${publicHost}:${port}` : ""),
       udpState: this.isRunning() ? "expected-open" : (available ? "closed" : "in-use"),
-      warning: !this.isRunning() ? "Le serveur est arrêté." : ""
+      transport:tunnelAddress ? "playit" : (publicHost ? "direct" : "local"),
+      warning: !this.isRunning()
+        ? "Le serveur est arrêté."
+        : (isRailway && !tunnelAddress ? "Railway nécessite un tunnel UDP Playit configuré." : "")
     };
   }
 
@@ -995,6 +1000,17 @@ function localAddresses() {
     }
   }
   return addresses;
+}
+
+export function playitAddressForPort(port, environment = process.env) {
+  try {
+    const configured = JSON.parse(environment.PLAYIT_TUNNELS || "{}");
+    if (configured && typeof configured[String(port)] === "string") return configured[String(port)].trim();
+  } catch {
+    // PLAYIT_ADDRESS remains the single-server fallback.
+  }
+  const principalPort = Number(environment.PLAYIT_LOCAL_PORT || 19132);
+  return Number(port) === principalPort ? String(environment.PLAYIT_ADDRESS || "").trim() : "";
 }
 
 function toPosix(value) {
