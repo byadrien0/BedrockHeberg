@@ -20,7 +20,7 @@ Cette app lance et gere plusieurs serveurs Minecraft Bedrock Dedicated Server av
 
 ## Variables Railway
 
-Ajoute au minimum:
+Ces variables sont recommandées. Sans elles, ServerAura génère des secrets persistants et affiche le mot de passe initial dans les logs:
 
 ```text
 ADMIN_PASSWORD=un-mot-de-passe-solide

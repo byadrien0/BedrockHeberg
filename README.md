@@ -117,8 +117,8 @@ Minecraft Bedrock Dedicated Server n'est officiellement fourni que pour Windows 
 | Variable | Obligatoire | Valeur par défaut | Description |
 | --- | --- | --- | --- |
 | `PORT` | non | `3001` | Port HTTP du panneau |
-| `ADMIN_PASSWORD` | en production | généré en développement | Mot de passe du premier compte `admin` |
-| `SESSION_SECRET` | en production | généré en développement | Secret de signature des sessions |
+| `ADMIN_PASSWORD` | recommandé | généré et conservé | Mot de passe du premier compte `admin` |
+| `SESSION_SECRET` | recommandé | généré et conservé | Secret de signature des sessions |
 | `AUTO_START` | non | `true` | Démarre automatiquement les instances configurées |
 | `SESSION_DIR` | non | dépend de l'environnement | Stockage persistant des sessions |
 | `SERVER_DIR` | non | dossier local ou `/data` | Dossier de l'instance principale historique |
@@ -129,6 +129,8 @@ Minecraft Bedrock Dedicated Server n'est officiellement fourni que pour Windows 
 | `BDS_DOWNLOAD_URL` | non | manifeste officiel | Archive Bedrock imposée manuellement |
 
 Ne publie jamais `.env`, les secrets de session, les mondes ou les sauvegardes dans Git.
+
+Si `ADMIN_PASSWORD` ou `SESSION_SECRET` manque, ServerAura génère automatiquement les valeurs dans `runtime-secrets.json`, à côté des sessions. Le mot de passe initial est affiché dans les logs de démarrage. En production, monte `/data` sur un volume persistant pour conserver ces valeurs entre les déploiements.
 
 ## Organisation des données
 

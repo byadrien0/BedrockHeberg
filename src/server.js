@@ -14,10 +14,10 @@ import { UserStore } from "./user-store.js";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 const port = Number(process.env.PORT || 3001);
-const isProduction = process.env.NODE_ENV === "production";
-const adminPassword = process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString("base64url");
-const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
 const sessionDir = path.resolve(process.env.SESSION_DIR || defaultSessionDir(rootDir));
+const runtimeSecrets = await loadOrCreateRuntimeSecrets(path.join(path.dirname(sessionDir), "runtime-secrets.json"));
+const adminPassword = process.env.ADMIN_PASSWORD || runtimeSecrets.adminPassword;
+const sessionSecret = process.env.SESSION_SECRET || runtimeSecrets.sessionSecret;
 const usingGeneratedPassword = !process.env.ADMIN_PASSWORD;
 const loginFailures = new Map();
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
@@ -25,16 +25,8 @@ const MAX_LOGIN_FAILURES = 8;
 const activity = new ActivityStore(path.join(path.dirname(sessionDir), "activity.json"));
 await activity.initialize();
 const users = new UserStore(path.join(path.dirname(sessionDir), "users.json"));
-await users.initialize(adminPassword);
+await users.initialize(adminPassword, { resetSoleAdminPassword:usingGeneratedPassword && runtimeSecrets.created });
 const upload = multer({ dest: path.join(os.tmpdir(), "bedrock-panel-uploads"), limits: { fileSize: 1024 * 1024 * 1024 } });
-
-if (isProduction && !process.env.ADMIN_PASSWORD) {
-  throw new Error("ADMIN_PASSWORD doit etre defini en production.");
-}
-
-if (isProduction && !process.env.SESSION_SECRET) {
-  throw new Error("SESSION_SECRET doit etre defini en production.");
-}
 
 function createFileSessionStore(dir) {
   class PersistentSessionStore extends session.Store {
@@ -537,8 +529,8 @@ app.use((err, _req, res, _next) => {
 });
 
 if (usingGeneratedPassword) {
-  console.log(`ADMIN_PASSWORD genere pour cette session: ${adminPassword}`);
-  console.log("Definis ADMIN_PASSWORD dans Railway pour garder un mot de passe stable.");
+  console.log(`ADMIN_PASSWORD automatique: ${adminPassword}`);
+  console.log("Ce mot de passe est conserve dans le volume. Definis ADMIN_PASSWORD pour le remplacer.");
 }
 
 app.listen(port, () => {
@@ -2361,6 +2353,24 @@ function defaultSessionDir(rootDir) {
     return "/data/panel/sessions";
   }
   return path.join(rootDir, ".panel", "sessions");
+}
+
+async function loadOrCreateRuntimeSecrets(file) {
+  await fsp.mkdir(path.dirname(file), { recursive:true });
+  try {
+    const saved = JSON.parse(await fsp.readFile(file, "utf8"));
+    if (saved.adminPassword && saved.sessionSecret) return { ...saved, created:false };
+  } catch (error) {
+    if (error.code !== "ENOENT") console.warn(`Secrets locaux illisibles, regeneration: ${error.message}`);
+  }
+  const secrets = {
+    adminPassword:crypto.randomBytes(18).toString("base64url"),
+    sessionSecret:crypto.randomBytes(48).toString("hex")
+  };
+  const temporary = `${file}.${process.pid}.tmp`;
+  await fsp.writeFile(temporary, JSON.stringify(secrets, null, 2), { encoding:"utf8", mode:0o600 });
+  await fsp.rename(temporary, file);
+  return { ...secrets, created:true };
 }
 
 function isLoginLimited(ip) {

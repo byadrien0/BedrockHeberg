@@ -8,7 +8,7 @@ export class UserStore {
     this.users = [];
   }
 
-  async initialize(initialPassword) {
+  async initialize(initialPassword, options = {}) {
     await fsp.mkdir(path.dirname(this.file), { recursive: true });
     try {
       const data = JSON.parse(await fsp.readFile(this.file, "utf8"));
@@ -18,6 +18,9 @@ export class UserStore {
     }
     if (!this.users.length) {
       this.users.push({ username: "admin", role: "admin", passwordHash: hashPassword(initialPassword), totpSecret: "", totpEnabled: false });
+      await this.save();
+    } else if (options.resetSoleAdminPassword && this.users.length === 1 && this.users[0].username === "admin" && !this.users[0].totpEnabled) {
+      this.users[0].passwordHash = hashPassword(initialPassword);
       await this.save();
     }
   }

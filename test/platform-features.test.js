@@ -98,6 +98,21 @@ test("user store supports roles and optional TOTP", async () => {
   }
 });
 
+test("bootstrap can repair a sole inaccessible admin account", async () => {
+  const rootDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-bootstrap-test-"));
+  try {
+    const file = path.join(rootDir, "users.json");
+    const first = new UserStore(file);
+    await first.initialize("lost-password");
+    const restarted = new UserStore(file);
+    await restarted.initialize("persistent-password", { resetSoleAdminPassword:true });
+    assert.equal((await restarted.authenticate("admin", "persistent-password")).role, "admin");
+    assert.equal(await restarted.authenticate("admin", "lost-password"), null);
+  } finally {
+    await fsp.rm(rootDir, { recursive:true, force:true });
+  }
+});
+
 test("file operations and backups preserve server data", async () => {
   const rootDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-files-test-"));
   try {
