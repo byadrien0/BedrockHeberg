@@ -37,6 +37,7 @@ const PROTECTED_ROOT_NAMES = new Set([
   ".env",
   ".env.example",
   ".bedrock-version",
+  ".bedrock-panel-state.json",
   ".panel",
   "node_modules",
   "src",
@@ -72,9 +73,12 @@ export class BedrockManager {
     this.commandHistory = [];
     this.detectedVersion = "";
     this.cachedDiskUsage = { value: 0, measuredAt: 0 };
+    this.persistentState = { firstStartedAt: "", lastError: "", version: "" };
+    this.stateLoaded = false;
   }
 
   async status() {
+    await this.loadPersistentState();
     const backups = await this.listBackups();
     const installed = await exists(this.executablePath());
     const gamePort = await this.readProperty("server-port");
@@ -92,8 +96,10 @@ export class BedrockManager {
       backupDir: this.backupDir,
       installed,
       installationState: this.installationState(installed),
+      lifecycle: this.lifecycleState(installed),
+      firstStartedAt: this.persistentState.firstStartedAt,
       operation: { ...this.operation, pending: this.pendingOperations },
-      lastError: this.lastError,
+      lastError: this.lastError || this.persistentState.lastError,
       version: await this.installedVersion(),
       diskUsageBytes: await this.diskUsage(),
       diskUsageLabel: formatBytes(await this.diskUsage()),
@@ -105,6 +111,15 @@ export class BedrockManager {
     if (["installing", "updating", "reinstalling"].includes(this.operation.type)) return "installing";
     if (installed) return "ready";
     return this.lastError ? "error" : "not-installed";
+  }
+
+  lifecycleState(installed) {
+    const error = this.lastError || this.persistentState.lastError;
+    if (error && !this.persistentState.firstStartedAt) return "error";
+    if (!installed) return "created";
+    if (["starting", "installing", "updating"].includes(this.operation.type) && !this.persistentState.firstStartedAt) return "initializing";
+    if (!this.persistentState.firstStartedAt) return "installed";
+    return "operational";
   }
 
   async runOperation(type, task) {
@@ -120,9 +135,15 @@ export class BedrockManager {
       try {
         const result = await task((progress) => this.setProgress(progress));
         this.setProgress(100);
+        if (["installing", "updating", "starting"].includes(type)) {
+          this.persistentState.lastError = "";
+          await this.savePersistentState().catch(() => {});
+        }
         return result;
       } catch (error) {
         this.lastError = error.message || "Erreur inconnue";
+        this.persistentState.lastError = this.lastError;
+        await this.savePersistentState().catch(() => {});
         this.emitEvent("error", { message: this.lastError, operation: type });
         throw error;
       } finally {
@@ -159,6 +180,7 @@ export class BedrockManager {
 
   async start() {
     if (this.isRunning()) return;
+    await this.loadPersistentState();
     this.manualStop = false;
     await this.prepare();
     const executable = this.executablePath();
@@ -177,6 +199,12 @@ export class BedrockManager {
     this.startedAt = Date.now();
     this.child.stdout.on("data", (chunk) => this.appendLog(chunk.toString()));
     this.child.stderr.on("data", (chunk) => this.appendLog(chunk.toString()));
+    this.child.on("error", (error) => {
+      this.lastError = error.message;
+      this.persistentState.lastError = error.message;
+      this.appendLog(`[panel] Echec du processus Bedrock: ${error.message}\n`);
+      this.savePersistentState().catch(() => {});
+    });
     this.child.on("exit", (code, signal) => {
       this.appendLog(`[panel] Serveur arrete (code=${code ?? "null"}, signal=${signal ?? "null"})\n`);
       this.startedAt = null;
@@ -184,6 +212,17 @@ export class BedrockManager {
         setTimeout(() => this.start().catch((error) => this.appendLog(`[panel] Redemarrage impossible: ${error.message}\n`)), 5000);
       }
     });
+    await Promise.race([
+      this.waitForLog(/server started|ipv4 supported|server is running/i, 60000, "Bedrock n'a pas confirmé son démarrage dans le délai prévu."),
+      new Promise((_, reject) => {
+        this.child.once("error", reject);
+        this.child.once("exit", (code) => reject(new Error(`Bedrock s'est arrêté pendant le démarrage (code ${code ?? "inconnu"}).`)));
+      })
+    ]);
+    if (!this.persistentState.firstStartedAt) this.persistentState.firstStartedAt = new Date().toISOString();
+    this.persistentState.lastError = "";
+    this.lastError = "";
+    await this.savePersistentState();
   }
 
   async stop(timeoutMs = 15000) {
@@ -406,6 +445,30 @@ export class BedrockManager {
       if (error.code === "ENOENT") return "Inconnue";
       throw error;
     }
+  }
+
+  async loadPersistentState() {
+    if (this.stateLoaded) return;
+    try {
+      const state = JSON.parse(await fsp.readFile(this.stateFile(), "utf8"));
+      this.persistentState = {
+        firstStartedAt: String(state.firstStartedAt || ""),
+        lastError: String(state.lastError || ""),
+        version: String(state.version || "")
+      };
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    this.stateLoaded = true;
+  }
+
+  async savePersistentState() {
+    await fsp.mkdir(this.serverDir, { recursive: true });
+    await fsp.writeFile(this.stateFile(), JSON.stringify(this.persistentState, null, 2), "utf8");
+  }
+
+  stateFile() {
+    return path.join(this.serverDir, ".bedrock-panel-state.json");
   }
 
   async latestVersionInfo() {
@@ -695,7 +758,7 @@ export class BedrockManager {
     this.emitEvent("logs", { lines: parts.filter(Boolean) });
   }
 
-  waitForLog(pattern, timeoutMs) {
+  waitForLog(pattern, timeoutMs, timeoutMessage = "Le serveur n'a pas confirmé la pause des sauvegardes à temps.") {
     return new Promise((resolve, reject) => {
       const waiter = {
         pattern,
@@ -708,7 +771,7 @@ export class BedrockManager {
       };
       const timer = setTimeout(() => {
         waiter.done = true;
-        reject(new Error("Le serveur n'a pas confirme la pause des sauvegardes a temps."));
+        reject(new Error(timeoutMessage));
       }, timeoutMs);
       this.logWaiters.push(waiter);
     });

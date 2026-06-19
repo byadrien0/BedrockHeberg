@@ -43,6 +43,21 @@ export class MultiServerManager {
       await this.saveConfig();
     }
     this.rebuildManagers();
+    await this.ensureInitialConfigurations();
+  }
+
+  async ensureInitialConfigurations() {
+    const usedPorts = new Set();
+    for (const server of this.servers) {
+      const manager = this.requireManager(server.id);
+      let port = Number(await manager.readProperty("server-port").catch(() => ""));
+      if (!Number.isInteger(port) || port < 1 || port > 65534) {
+        port = 19132;
+        while (usedPorts.has(port)) port += 2;
+        await updateProperties(manager, { name:server.name, port });
+      }
+      usedPorts.add(port);
+    }
   }
 
   async list() {

@@ -29,6 +29,7 @@ try {
   assert.equal(statusResponse.status, 200);
   const status = await statusResponse.json();
   assert.ok(["not-installed", "ready", "error"].includes(status.installationState));
+  assert.ok(["created", "installed", "operational", "error"].includes(status.lifecycle));
 } finally {
   const deleted = await request(`/api/servers/${encodeURIComponent(created.server.id)}`, {
     method:"DELETE",

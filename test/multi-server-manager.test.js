@@ -49,6 +49,7 @@ test("server registry writes replace an existing JSON file cleanly", async () =>
   try {
     const manager = new MultiServerManager({ rootDir, autoStart: false });
     await manager.initialize();
+    assert.equal(await manager.requireManager("principal").readProperty("server-port"), "19132");
     manager.servers[0].name = "Serveur test";
     await manager.saveConfig();
 

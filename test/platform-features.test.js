@@ -29,6 +29,22 @@ test("operation queue reports progress and rejects duplicate queued work", async
   }
 });
 
+test("server lifecycle distinguishes created, installed and operational", async () => {
+  const rootDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-lifecycle-test-"));
+  try {
+    const manager = new BedrockManager({ rootDir, serverDir:path.join(rootDir, "server"), backupDir:path.join(rootDir, "backups") });
+    await manager.writeProperties("server-port=19132\n");
+    assert.equal((await manager.status()).lifecycle, "created");
+    await fsp.writeFile(manager.executablePath(), "placeholder");
+    assert.equal((await manager.status()).lifecycle, "installed");
+    manager.persistentState.firstStartedAt = new Date().toISOString();
+    await manager.savePersistentState();
+    assert.equal((await manager.status()).lifecycle, "operational");
+  } finally {
+    await fsp.rm(rootDir, { recursive:true, force:true });
+  }
+});
+
 test("backup policy is normalized to safe scheduler limits", () => {
   assert.deepEqual(normalizeBackupPolicy({ enabled:true, intervalMinutes:1, retention:200 }), { enabled:true, intervalMinutes:15, retention:100 });
 });

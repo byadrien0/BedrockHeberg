@@ -20,10 +20,11 @@ try {
     await page.locator("[data-server]").first().click();
     await eventRequest;
     await page.locator("#installTitle").waitFor({ timeout:10000 });
-    await page.getByRole("button", { name:"Mondes" }).click();
-    await page.getByRole("heading", { name:"Mondes" }).waitFor();
+    assert.equal(await page.getByRole("button", { name:"Mondes" }).isVisible(), false);
+    assert.equal(await page.getByRole("button", { name:"Console" }).isVisible(), false);
+    await page.screenshot({ path:path.resolve(".panel", "browser-preflight.png"), fullPage:true });
     await page.getByRole("button", { name:"Comptes" }).click();
-    await page.getByRole("heading", { name:"Comptes administrateurs" }).waitFor();
+    await page.getByRole("heading", { name:"Comptes", exact:true }).waitFor();
     await page.locator("#userList .data-row").first().waitFor();
     await page.screenshot({ path:path.resolve(".panel", "browser-detail.png"), fullPage:true });
     await page.getByRole("button", { name:"Mes serveurs" }).click();

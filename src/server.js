@@ -596,7 +596,7 @@ function panelHtml(csrfToken = "") {
   <title>Bedrock Host Panel</title>
   <script src="/assets/lucide.min.js"></script>
   <style>
-    :root { --ink:#f7f8ff; --muted:#a8afc9; --bg:#111522; --panel:#272c42; --panel-2:#303650; --panel-3:#1c2234; --line:#394059; --blue:#5b8cff; --blue-2:#223763; --red:#ff5d62; --green:#54d18a; --amber:#f2b85b; --code:#111521; --soft:#202842; }
+    :root { --ink:#f4f6fa; --muted:#aeb5c2; --bg:#111318; --panel:#272a32; --panel-2:#30343d; --panel-3:#1b1e25; --line:#3c414c; --blue:#5b8cff; --blue-2:#253650; --red:#ef666c; --green:#50c982; --amber:#e8b45e; --code:#101216; --soft:#20242c; }
     * { box-sizing:border-box; }
     body { margin:0; min-height:100vh; background:#151820; color:var(--ink); font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing:0; }
     body::before { content:""; position:fixed; inset:0; pointer-events:none; background-image:linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px); background-size:32px 32px; }
@@ -604,13 +604,14 @@ function panelHtml(csrfToken = "") {
     h2 { margin:0; font-size:18px; font-weight:900; }
     h3 { margin:0 0 10px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
     .shell { position:relative; z-index:1; min-height:100vh; display:grid; grid-template-columns:296px minmax(0, 1fr); }
-    .sidebar { position:sticky; top:0; min-height:100vh; max-height:100vh; overflow:auto; padding:18px 18px 22px; background:rgba(27,32,50,.92); border-right:1px solid rgba(255,255,255,.06); display:grid; align-content:start; gap:22px; }
+    .sidebar { position:sticky; top:0; min-height:100vh; max-height:100vh; overflow:auto; padding:18px 18px 22px; background:#1b1e26; border-right:1px solid rgba(255,255,255,.07); display:grid; align-content:start; gap:22px; }
     .brand { display:flex; align-items:center; gap:12px; min-height:44px; font-size:25px; font-weight:950; letter-spacing:.02em; }
     .brand-mark { width:34px; height:34px; border-radius:8px; display:grid; place-items:center; background:linear-gradient(135deg, #1db7ff, #6c7bff); color:#fff; box-shadow:0 12px 24px rgba(29,183,255,.22); }
     .side-group { display:grid; gap:8px; }
     .side-group.compact .content { padding:14px; }
-    .nav-item { min-height:42px; display:flex; align-items:center; gap:12px; color:var(--muted); padding:0 10px; border-radius:7px; font-weight:800; }
+    .nav-item { min-height:42px; display:flex; align-items:center; gap:12px; color:var(--muted); padding:0 10px; border-radius:7px; font-weight:700; }
     .nav-item.active { color:#76a6ff; background:#22304f; }
+    button.nav-item { width:100%; min-height:42px; justify-content:flex-start; border:0; background:transparent; }
     .plan-card { border:1px solid #425070; background:#2b3149; border-radius:8px; padding:12px; display:grid; gap:4px; box-shadow:inset 4px 0 0 var(--blue); }
     .plan-title { display:flex; align-items:center; gap:9px; font-weight:900; }
     .main { min-width:0; padding:22px 24px 36px; display:grid; gap:18px; align-content:start; }
@@ -631,11 +632,12 @@ function panelHtml(csrfToken = "") {
     .tab { min-height:40px; border-radius:7px; padding:0 14px; border:0; background:transparent; display:inline-flex; align-items:center; color:var(--muted); font-weight:900; }
     .tab:hover { background:#343c58; }
     .tab.active { color:#79a9ff; background:#263d6a; }
-    .panel, section { min-width:0; background:rgba(42,48,72,.94); border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 16px 40px rgba(0,0,0,.14); }
+    .tab-list select { width:auto; min-width:116px; height:40px; background:#343944; border-color:#444a56; font-weight:800; }
+    .panel, section { min-width:0; background:#272b34; border:1px solid var(--line); border-radius:8px; overflow:hidden; box-shadow:0 14px 34px rgba(0,0,0,.14); }
     .head { min-height:62px; padding:16px 18px; border-bottom:1px solid rgba(255,255,255,.06); display:flex; align-items:center; justify-content:space-between; gap:12px; }
     .content { padding:18px; }
     .actions { display:flex; flex-wrap:wrap; gap:8px; }
-    button, a.button { min-height:42px; border:1px solid transparent; border-radius:7px; background:#39415e; color:var(--ink); padding:0 14px; display:inline-flex; align-items:center; justify-content:center; gap:8px; font:900 14px inherit; cursor:pointer; text-decoration:none; transition:background .15s ease, transform .15s ease, border-color .15s ease; }
+    button, a.button { min-height:42px; border:1px solid transparent; border-radius:7px; background:#393e49; color:var(--ink); padding:0 14px; display:inline-flex; align-items:center; justify-content:center; gap:8px; font:800 14px inherit; cursor:pointer; text-decoration:none; transition:background .15s ease, transform .15s ease, border-color .15s ease; }
     button:hover, a.button:hover { background:#455072; }
     button:active, a.button:active { transform:scale(.98); }
     button.primary { background:var(--blue); border-color:var(--blue); color:#fff; }
@@ -685,10 +687,9 @@ function panelHtml(csrfToken = "") {
     .stat-box b { display:block; margin-top:5px; font-size:14px; overflow-wrap:anywhere; }
     .grid { display:grid; grid-template-columns:repeat(4, minmax(130px, 1fr)); gap:12px; }
     .left-column .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
-    .left-column .metric:nth-child(5) { grid-column:1 / -1; }
-    .metric { border:1px solid #3a4260; border-radius:8px; padding:14px; min-height:86px; background:#242b42; }
+    .metric { border:1px solid #3d434f; border-radius:8px; padding:14px; min-height:86px; background:#22262e; }
     .metric span { display:block; color:var(--muted); font-size:12px; font-weight:900; text-transform:uppercase; }
-    .metric strong { display:block; margin-top:8px; font-size:20px; font-weight:900; overflow-wrap:anywhere; }
+    .metric strong { display:block; margin-top:8px; font-size:17px; font-weight:800; overflow-wrap:anywhere; }
     pre { margin:0; height:380px; overflow:auto; background:var(--code); color:#f7f8ff; padding:16px; font:13px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space:pre-wrap; }
     .command { flex:1 1 260px; }
     .backup-list { list-style:none; display:grid; gap:8px; padding:0; margin:0; }
@@ -724,7 +725,7 @@ function panelHtml(csrfToken = "") {
     .hidden { display:none !important; }
     .progress { height:8px; overflow:hidden; border-radius:4px; background:#171b25; }
     .progress > span { display:block; height:100%; width:0; background:var(--blue); transition:width .2s ease; }
-    .install-panel { display:grid; gap:12px; padding:14px; border:1px solid #46506d; border-radius:8px; background:#202633; }
+    .install-panel { display:grid; gap:12px; padding:14px; border:1px solid #464c58; border-radius:8px; background:#20242c; }
     .install-panel.ready { border-color:#397e57; }
     .install-panel.error { border-color:#7a3b43; }
     .toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
@@ -742,8 +743,15 @@ function panelHtml(csrfToken = "") {
     .console-tools input { flex:1; }
     .activity-list { display:grid; gap:0; }
     .activity-row { display:grid; grid-template-columns:160px 180px 100px minmax(0, 1fr); gap:12px; padding:11px 0; border-bottom:1px solid rgba(255,255,255,.06); align-items:center; }
+    .lifecycle { display:flex; align-items:center; gap:8px; flex-wrap:wrap; color:var(--muted); }
+    .lifecycle span { min-height:30px; display:inline-flex; align-items:center; padding:0 9px; border:1px solid #444a55; border-radius:6px; font-size:12px; font-weight:800; }
+    .lifecycle span.active { color:#15181e; border-color:var(--amber); background:var(--amber); }
+    .lifecycle span.done { color:#a6edbf; border-color:#397e57; background:#203d31; }
+    .lifecycle svg { width:14px; height:14px; }
+    .preflight { border-color:#735d35; background:#2d281f; }
     @media (max-width: 1120px) { .shell { grid-template-columns:1fr; } .sidebar { position:relative; min-height:auto; max-height:none; } .dashboard, .tab-panel.split.active, .overview-board, .file-layout { grid-template-columns:1fr; } .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 620px) { .sidebar { min-height:auto; max-height:none; padding:12px 14px; display:flex; align-items:center; gap:12px; } .brand { font-size:19px; } .brand-mark { width:32px; height:32px; } .sidebar .plan-card, .side-group h3 { display:none; } .side-group { margin-left:auto; } .nav-item { min-height:38px; padding:0 9px; } .main { padding:14px; } .overview-hero, .hero { display:grid; align-items:start; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; overflow:auto; } .tab-list { flex-wrap:nowrap; } .grid, .left-column .grid, .fields, .server-stats, .form-grid, .two-columns { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .left-column .metric:nth-child(5) { grid-column:auto; } .actions button, .actions a.button { flex:1 1 auto; } .modal-footer { display:grid; grid-template-columns:1fr 1fr; } .activity-row { grid-template-columns:1fr; gap:4px; } }
+    @media (max-width: 620px) { .sidebar { min-height:auto; max-height:none; padding:12px 14px; display:flex; align-items:center; gap:12px; } .brand { font-size:19px; } .brand-mark { width:32px; height:32px; } .sidebar .plan-card, .side-group h3 { display:none; } .side-group { margin-left:auto; display:flex; } .nav-item { min-height:38px; padding:0 9px; } .nav-item { font-size:0; } .nav-item svg { margin:0; } .main { padding:14px; } .overview-hero, .hero { display:grid; align-items:start; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; overflow:auto; } .tab-list { flex-wrap:nowrap; } .grid, .left-column .grid, .fields, .server-stats, .form-grid, .two-columns { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .actions button, .actions a.button { flex:1 1 auto; } .modal-footer { display:grid; grid-template-columns:1fr 1fr; } .activity-row { grid-template-columns:1fr; gap:4px; } .lifecycle i { display:none; } }
+    @media (max-width: 620px) { .shell { grid-template-rows:68px auto; align-content:start; } .sidebar { height:68px; min-height:68px; max-height:68px; } .server-card-meta { display:grid; gap:4px; } }
   </style>
 </head>
 <body>
@@ -752,11 +760,12 @@ function panelHtml(csrfToken = "") {
       <div class="brand"><span class="brand-mark"><i data-lucide="zap"></i></span><span>BEDROCK</span></div>
       <div class="side-group">
         <h3>Menu</h3>
-        <div class="nav-item active"><i data-lucide="cloud"></i>Mes serveurs</div>
+        <button class="nav-item active" id="navServers"><i data-lucide="cloud"></i>Mes serveurs</button>
+        <button class="nav-item" id="navAccounts"><i data-lucide="users"></i>Comptes</button>
       </div>
       <div class="plan-card">
-        <div class="plan-title"><span class="server-icon"><i data-lucide="box"></i></span><span>Bedrock Fleet</span></div>
-        <span class="muted">Multi-serveurs locaux</span>
+        <div class="plan-title"><span class="server-icon"><i data-lucide="server"></i></span><span>État global</span></div>
+        <span class="muted" id="sidebarSummary">Chargement…</span>
       </div>
     </aside>
 
@@ -811,14 +820,12 @@ function panelHtml(csrfToken = "") {
         <div class="tabs-nav">
           <div class="tab-list">
             <button class="tab active" data-tab="overview">Aperçu</button>
-            <button class="tab" data-tab="console">Console</button>
-            <button class="tab" data-tab="config">Configuration</button>
-            <button class="tab" data-tab="backups">Sauvegardes</button>
-            <button class="tab" data-tab="files">Fichiers</button>
-            <button class="tab" data-tab="players">Joueurs</button>
-            <button class="tab" data-tab="worlds">Mondes</button>
+            <button class="tab" data-tab="console" data-requires-first-run>Console</button>
+            <button class="tab" data-tab="config" data-requires-first-run>Configuration</button>
+            <button class="tab" data-tab="players" data-requires-first-run>Joueurs</button>
+            <button class="tab" data-tab="worlds" data-requires-first-run>Mondes</button>
             <button class="tab" data-tab="activity">Activité</button>
-            <button class="tab" data-tab="accounts" id="accountsTab">Comptes</button>
+            <select id="moreTab" data-requires-first-run aria-label="Plus de sections"><option value="">Plus…</option><option value="files">Fichiers</option><option value="backups">Sauvegardes</option></select>
           </div>
           <div class="actions">
             <button class="icon" id="refreshDetail" title="Actualiser"><i data-lucide="refresh-cw"></i></button>
@@ -838,18 +845,18 @@ function panelHtml(csrfToken = "") {
             </div>
             <div class="content">
               <div class="grid">
-                <div class="metric"><span>Installation</span><strong id="installationState">...</strong></div>
-                <div class="metric"><span>Version</span><strong id="serverVersion">...</strong></div>
-                <div class="metric"><span>Uptime</span><strong id="serverUptime">...</strong></div>
-                <div class="metric"><span>Joueurs</span><strong id="playerCount">...</strong></div>
-                <div class="metric"><span>Stockage utilisé</span><strong id="diskUsage">...</strong></div>
-                <div class="metric"><span>Dernière sauvegarde</span><strong id="lastBackup">...</strong></div>
-                <div class="metric"><span>Adresse locale</span><strong id="serverAddress">...</strong><button class="icon" id="copyAddress" title="Copier l’adresse"><i data-lucide="copy"></i></button></div>
-                <div class="metric"><span>Adresse publique</span><strong id="publicAddress">...</strong></div>
-                <div class="metric"><span>État réseau UDP</span><strong id="networkState">...</strong></div>
-                <div class="metric"><span>Dernière erreur</span><strong id="lastServerError">...</strong></div>
+                <div class="metric" data-requires-installed><span>Version</span><strong id="serverVersion">...</strong></div>
+                <div class="metric" data-requires-first-run><span>Uptime</span><strong id="serverUptime">...</strong></div>
+                <div class="metric" data-requires-first-run><span>Joueurs</span><strong id="playerCount">...</strong></div>
+                <div class="metric" data-requires-first-run><span>Stockage utilisé</span><strong id="diskUsage">...</strong></div>
+                <div class="metric" data-requires-first-run><span>Dernière sauvegarde</span><strong id="lastBackup">...</strong></div>
+                <div class="metric" data-requires-first-run><span>Adresse locale</span><strong id="serverAddress">...</strong><button class="icon" id="copyAddress" title="Copier l’adresse"><i data-lucide="copy"></i></button></div>
+                <div class="metric" data-requires-first-run><span>Adresse publique</span><strong id="publicAddress">...</strong></div>
+                <div class="metric" data-requires-first-run><span>État réseau UDP</span><strong id="networkState">...</strong></div>
+                <div class="metric hidden" id="lastErrorMetric"><span>Dernière erreur</span><strong id="lastServerError">...</strong></div>
               </div>
               <div class="install-panel" id="installPanel" style="margin-top:16px">
+                <div class="lifecycle" id="lifecycleSteps"><span data-lifecycle="created">Créé</span><i data-lucide="chevron-right"></i><span data-lifecycle="installed">Installé</span><i data-lucide="chevron-right"></i><span data-lifecycle="initializing">Initialisation</span><i data-lucide="chevron-right"></i><span data-lifecycle="operational">Opérationnel</span></div>
                 <div class="row"><div><strong id="installTitle">État de l’installation</strong><div class="muted" id="installMessage"></div></div><span class="badge" id="installBadge">...</span></div>
                 <div class="progress"><span id="operationProgress"></span></div>
                 <div class="actions">
@@ -870,7 +877,7 @@ function panelHtml(csrfToken = "") {
                   <input id="serverPort" type="number" min="1" max="65534">
                 </div>
               </div>
-              <label class="checkrow"><input id="serverAutoStart" type="checkbox"> Auto-start</label>
+              <label class="checkrow" data-requires-first-run><input id="serverAutoStart" type="checkbox"> Démarrage automatique</label>
             </div>
           </section>
 
@@ -908,10 +915,10 @@ function panelHtml(csrfToken = "") {
               <div class="form-grid">
                 <div><label for="propServerName">Nom affiché</label><input id="propServerName"></div>
                 <div><label for="propLevelName">Monde</label><input id="propLevelName"></div>
-                <div><label for="propGamemode">Game mode</label><select id="propGamemode"><option>survival</option><option>creative</option><option>adventure</option></select></div>
-                <div><label for="propDifficulty">Difficulté</label><select id="propDifficulty"><option>peaceful</option><option>easy</option><option>normal</option><option>hard</option></select></div>
-                <div><label for="propMaxPlayers">Max players</label><input id="propMaxPlayers" type="number" min="1"></div>
-                <div><label for="propAllowCheats">Cheats</label><select id="propAllowCheats"><option value="false">False</option><option value="true">True</option></select></div>
+                <div><label for="propGamemode">Mode de jeu</label><select id="propGamemode"><option value="survival">Survie</option><option value="creative">Créatif</option><option value="adventure">Aventure</option></select></div>
+                <div><label for="propDifficulty">Difficulté</label><select id="propDifficulty"><option value="peaceful">Paisible</option><option value="easy">Facile</option><option value="normal">Normale</option><option value="hard">Difficile</option></select></div>
+                <div><label for="propMaxPlayers">Joueurs maximum</label><input id="propMaxPlayers" type="number" min="1"></div>
+                <div><label for="propAllowCheats">Commandes de triche</label><select id="propAllowCheats"><option value="false">Désactivées</option><option value="true">Activées</option></select></div>
                 <div><label for="propOnlineMode">Mode en ligne</label><select id="propOnlineMode"><option value="true">Activé</option><option value="false">Désactivé</option></select></div>
                 <div><label for="propAllowList">Liste blanche</label><select id="propAllowList"><option value="false">Désactivée</option><option value="true">Activée</option></select></div>
                 <div><label for="propForceGamemode">Forcer le mode de jeu</label><select id="propForceGamemode"><option value="false">Non</option><option value="true">Oui</option></select></div>
@@ -1017,9 +1024,12 @@ function panelHtml(csrfToken = "") {
         </section>
       </div>
 
-      <div class="tab-panel" data-panel="accounts">
+      </div>
+
+      <div class="view" id="accountsView">
+        <div class="overview-hero"><div><h1>Comptes</h1><p>Accès au panel et sécurité.</p></div></div>
         <section>
-          <div class="head"><h2>Comptes administrateurs</h2></div>
+          <div class="head"><h2>Utilisateurs</h2></div>
           <div class="content two-columns">
             <div class="stack"><div class="data-list" id="userList"></div></div>
             <div class="install-panel">
@@ -1031,7 +1041,6 @@ function panelHtml(csrfToken = "") {
             </div>
           </div>
         </section>
-      </div>
       </div>
     </main>
   </div>
@@ -1167,13 +1176,13 @@ function setConnectionState(connected) {
 async function loadCurrentUser() {
   const data = await api("/api/me");
   currentUser = data.user;
-  $("accountsTab").classList.toggle("hidden", currentUser.role !== "admin");
+  $("navAccounts").classList.toggle("hidden", currentUser.role !== "admin");
   applyRole();
 }
 
 function applyRole() {
   if (currentUser.role !== "viewer") return;
-  const allowed = new Set(["refreshServers", "refreshDetail", "backOverview", "refreshLogs", "refreshPlayers", "refreshActivity", "copyAddress", "checkVersion", "goUpFile", "downloadFile"]);
+  const allowed = new Set(["navServers", "navAccounts", "refreshServers", "refreshDetail", "backOverview", "refreshLogs", "refreshPlayers", "refreshActivity", "copyAddress", "checkVersion", "goUpFile", "downloadFile"]);
   document.querySelectorAll("button").forEach((button) => {
     if (button.dataset.tab !== undefined || button.dataset.server !== undefined || button.dataset.breadcrumb !== undefined || allowed.has(button.id) || button.closest('form[action="/logout"]')) return;
     button.disabled = true;
@@ -1215,6 +1224,7 @@ function renderGlobalPill() {
   const running = servers.filter((server) => server.status && server.status.running).length;
   $("globalPill").className = "pill " + (running ? "ok" : "off");
   $("globalPill").querySelector("span").textContent = running + "/" + servers.length + " en ligne";
+  $("sidebarSummary").textContent = running + " en ligne · " + servers.length + " serveur(s)";
 }
 
 function renderServerGallery() {
@@ -1223,9 +1233,10 @@ function renderServerGallery() {
   target.innerHTML = servers.map((server) => {
     const status = server.status || {};
     const active = server.id === activeId ? " active" : "";
-    const pill = status.running ? '<span class="pill ok">En ligne</span>' : '<span class="pill off">Arrêté</span>';
+    const lifecycleLabels = { created:"À installer", installed:"Premier lancement", initializing:"Initialisation", error:"Erreur" };
+    const pill = status.running ? '<span class="pill ok">En ligne</span>' : '<span class="pill off">' + (lifecycleLabels[status.lifecycle] || "Arrêté") + '</span>';
     const port = escapeHtmlClient(status.gamePort || "-");
-    const world = escapeHtmlClient(status.worldName || "-");
+    const world = status.lifecycle === "operational" ? escapeHtmlClient(status.worldName || "-") : "Configuration initiale";
     const address = escapeHtmlClient(serverAddress(status));
     return '<article class="server-card' + active + '" data-server-card="' + escapeHtmlClient(server.id) + '">' +
       '<span class="server-icon"><i data-lucide="box"></i></span>' +
@@ -1251,6 +1262,9 @@ function renderServerGallery() {
 function renderView() {
   $("overviewView").classList.toggle("active", viewMode === "overview");
   $("detailView").classList.toggle("active", viewMode === "detail");
+  $("accountsView").classList.toggle("active", viewMode === "accounts");
+  $("navServers").classList.toggle("active", viewMode !== "accounts");
+  $("navAccounts").classList.toggle("active", viewMode === "accounts");
   renderTabs();
   lucide.createIcons();
 }
@@ -1262,6 +1276,7 @@ function renderTabs() {
   document.querySelectorAll("[data-panel]").forEach((panel) => {
     panel.classList.toggle("active", panel.dataset.panel === detailTab);
   });
+  $("moreTab").value = ["files", "backups"].includes(detailTab) ? detailTab : "";
 }
 
 function setDetailTab(tab) {
@@ -1295,6 +1310,13 @@ function showOverview() {
   viewMode = "overview";
   renderView();
   refreshServers().catch((error) => toast(error.message));
+}
+
+function showAccounts() {
+  disconnectEvents();
+  viewMode = "accounts";
+  renderView();
+  loadUsers().catch((error) => toast(error.message, "error"));
 }
 
 function connectEvents() {
@@ -1332,7 +1354,12 @@ function disconnectEvents() {
 
 function updateOperation(operation) {
   const server = activeServer();
-  if (server) server.status = { ...(server.status || {}), operation };
+  if (server) {
+    server.status = { ...(server.status || {}), operation };
+    if (!server.status.firstStartedAt && operation.type === "starting") server.status.lifecycle = "initializing";
+    renderLifecycle(server.status);
+    renderInstallation(server.status);
+  }
   const progress = Number(operation.progress || 0);
   $("operationProgress").style.width = progress + "%";
   renderOperationControls(operation);
@@ -1374,7 +1401,7 @@ function renderActive() {
     $("serverAutoStart").checked = false;
     $("statePill").className = "pill off";
     $("statePill").querySelector("span").textContent = "Aucun";
-    ["installationState", "serverVersion", "serverUptime", "playerCount", "diskUsage", "lastBackup", "serverAddress", "publicAddress", "networkState", "lastServerError"].forEach((id) => { $(id).textContent = "-"; });
+    ["serverVersion", "serverUptime", "playerCount", "diskUsage", "lastBackup", "serverAddress", "publicAddress", "networkState", "lastServerError"].forEach((id) => { $(id).textContent = "-"; });
     $("logs").textContent = "";
     clearPropertyForm();
     $("backupList").innerHTML = '<li><span class="muted">Aucun serveur sélectionné.</span></li>';
@@ -1398,9 +1425,7 @@ function renderActive() {
     $(id).disabled = !status.running;
   });
   $("statePill").className = "pill " + (status.running ? "ok" : "off");
-  $("statePill").querySelector("span").textContent = status.error ? "Erreur" : (status.running ? "En ligne" : "Arrêté");
-  const installationLabels = { "not-installed":"Non installé", installing:"Installation", ready:"Prêt", error:"Erreur" };
-  $("installationState").textContent = installationLabels[status.installationState] || "Inconnu";
+  $("statePill").querySelector("span").textContent = status.lifecycle === "error" ? "Erreur" : (status.running ? "En ligne" : (status.lifecycle === "created" ? "À installer" : (status.lifecycle === "installed" ? "Premier lancement" : "Arrêté")));
   $("serverVersion").textContent = status.version || "Inconnue";
   $("serverUptime").textContent = formatDuration(status.uptimeSeconds || 0);
   $("playerCount").textContent = server.playerCount ?? "-";
@@ -1411,30 +1436,68 @@ function renderActive() {
   const networkLabels = { "expected-open":"En écoute", closed:"Fermé", "in-use":"Port utilisé" };
   $("networkState").textContent = networkLabels[status.network?.udpState] || "Inconnu";
   $("lastServerError").textContent = status.lastError || status.error || "Aucune";
+  $("lastErrorMetric").classList.toggle("hidden", !status.lastError && !status.error);
   $("backupEnabled").value = String(Boolean(server.backupPolicy?.enabled));
   $("backupInterval").value = String(server.backupPolicy?.intervalMinutes || 360);
   $("backupRetention").value = server.backupPolicy?.retention || 10;
   renderInstallation(status);
+  renderLifecycle(status);
   renderOperationControls(status.operation || { type:"idle", progress:0 });
   lucide.createIcons();
   applyRole();
 }
 
+function renderLifecycle(status) {
+  const lifecycle = status.lifecycle || "created";
+  const firstRun = lifecycle === "operational";
+  const installed = Boolean(status.installed);
+  document.querySelectorAll("[data-requires-first-run]").forEach((element) => element.classList.toggle("hidden", !firstRun));
+  document.querySelectorAll("[data-requires-installed]").forEach((element) => element.classList.toggle("hidden", !installed));
+  if (!firstRun && ["console", "config", "players", "worlds", "files", "backups"].includes(detailTab)) {
+    detailTab = "overview";
+    renderTabs();
+  }
+  const order = ["created", "installed", "initializing", "operational"];
+  const currentIndex = lifecycle === "error" ? Math.max(0, order.indexOf(installed ? "installed" : "created")) : order.indexOf(lifecycle);
+  document.querySelectorAll("[data-lifecycle]").forEach((step) => {
+    const index = order.indexOf(step.dataset.lifecycle);
+    step.classList.toggle("done", index < currentIndex);
+    step.classList.toggle("active", index === currentIndex);
+  });
+  $("startBtn").classList.toggle("hidden", !installed || status.running);
+  $("startBtn").innerHTML = '<i data-lucide="play"></i>' + (firstRun ? "Démarrer" : "Premier démarrage");
+  $("restartBtn").classList.toggle("hidden", !firstRun);
+  $("stopBtn").classList.toggle("hidden", !firstRun && !status.running);
+  $("installPanel").classList.toggle("preflight", !firstRun);
+  $("sidebarSummary").textContent = servers.filter((item) => item.status?.running).length + " en ligne · " + servers.length + " serveur(s)";
+}
+
 function renderInstallation(status) {
   const state = status.installationState || "not-installed";
+  const lifecycle = status.lifecycle || "created";
+  const firstRun = lifecycle === "operational";
   const panel = $("installPanel");
   panel.className = "install-panel " + (state === "ready" ? "ready" : (state === "error" ? "error" : ""));
-  const labels = { "not-installed":"Non installé", installing:"Installation en cours", ready:"Serveur prêt", error:"Installation en erreur" };
-  $("installTitle").textContent = labels[state] || "État inconnu";
-  $("installBadge").textContent = state === "ready" ? "Prêt" : (state === "installing" ? "En cours" : "Action requise");
-  $("installBadge").className = "badge " + (state === "ready" ? "ok" : (state === "error" ? "error" : ""));
+  const labels = { created:"Installation requise", installed:"Prêt pour le premier démarrage", initializing:"Initialisation du serveur", operational:"Serveur opérationnel", error:"Action requise" };
+  $("installTitle").textContent = labels[lifecycle] || "État inconnu";
+  $("installBadge").textContent = lifecycle === "operational" ? "Opérationnel" : (lifecycle === "initializing" ? "En cours" : "À terminer");
+  $("installBadge").className = "badge " + (lifecycle === "operational" ? "ok" : (lifecycle === "error" ? "error" : ""));
   const network = status.network || {};
   const address = network.publicAddress || network.localAddress || "Adresse indisponible";
-  $("installMessage").textContent = state === "not-installed"
-    ? "Installe automatiquement Bedrock sous Linux ou importe le binaire attendu sur Windows."
-    : (state === "error" ? (status.lastError || "Consulte la console pour le détail.") : "Version " + (status.version || "inconnue") + " · " + address + (network.warning ? " · " + network.warning : ""));
+  const messages = {
+    created:"Installe Bedrock sous Linux ou importe le binaire attendu sur Windows.",
+    installed:"Le binaire est présent. Effectue maintenant le premier démarrage pour initialiser les fichiers et le monde.",
+    initializing:"Bedrock prépare actuellement le serveur et son premier monde.",
+    operational:"Version " + (status.version || "inconnue") + " · " + address + (network.warning ? " · " + network.warning : ""),
+    error:status.lastError || "Corrige l’erreur puis relance l’étape en attente."
+  };
+  $("installMessage").textContent = messages[lifecycle] || messages.created;
   $("installServer").disabled = Boolean(status.installed) || state === "installing";
   $("updateServer").disabled = !status.installed || state === "installing";
+  $("installServer").classList.toggle("hidden", Boolean(status.installed));
+  $("chooseBinary").classList.toggle("hidden", Boolean(status.installed) && lifecycle !== "error");
+  $("checkVersion").classList.toggle("hidden", !firstRun);
+  $("updateServer").classList.toggle("hidden", !firstRun);
 }
 
 function renderOperationControls(operation) {
@@ -1832,9 +1895,12 @@ $("textInputModal").addEventListener("cancel", (event) => {
 $("refreshServers").onclick = () => refreshServers().catch((error) => toast(error.message));
 $("refreshDetail").onclick = () => refreshActive().catch((error) => toast(error.message));
 $("backOverview").onclick = () => showOverview();
+$("navServers").onclick = () => showOverview();
+$("navAccounts").onclick = () => showAccounts();
 document.querySelectorAll("[data-tab]").forEach((button) => {
   button.onclick = () => setDetailTab(button.dataset.tab);
 });
+$("moreTab").onchange = () => { if ($("moreTab").value) setDetailTab($("moreTab").value); };
 $("refreshLogs").onclick = () => refreshLogs().catch((error) => toast(error.message));
 $("startBtn").onclick = () => action("Serveur démarré.", () => api(endpoint("/start"), { method:"POST" }));
 $("stopBtn").onclick = () => action("Serveur arrêté.", () => api(endpoint("/stop"), { method:"POST" }));
