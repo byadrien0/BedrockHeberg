@@ -111,6 +111,9 @@ app.use(
   })
 );
 app.use(csrfProtection);
+app.get("/health", (_req, res) => {
+  res.json({ ok:true, playit:playit.status().state });
+});
 app.use("/api", (req, res, next) => {
   if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && req.session?.authenticated && (req.session.user?.role || "admin") !== "admin") {
     return res.status(403).json({ error: "Action réservée aux administrateurs." });
@@ -540,11 +543,28 @@ if (usingGeneratedPassword) {
   console.log("Ce mot de passe est conserve dans le volume. Definis ADMIN_PASSWORD pour le remplacer.");
 }
 
-app.listen(port, () => {
+const httpServer = app.listen(port, () => {
   console.log(`Interface Bedrock prete sur le port ${port}`);
 });
 
 await fleet.startAutoServers();
+
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Arret propre demande par Railway (${signal}).`);
+  httpServer.close();
+  playit.stop();
+  const forcedExit = setTimeout(() => process.exit(1), 20000);
+  forcedExit.unref?.();
+  await fleet.shutdown();
+  clearTimeout(forcedExit);
+  process.exit(0);
+}
+
+process.once("SIGTERM", () => shutdown("SIGTERM"));
+process.once("SIGINT", () => shutdown("SIGINT"));
 
 function loginHtml(error = "") {
   return `<!doctype html>

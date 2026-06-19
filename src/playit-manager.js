@@ -13,6 +13,7 @@ export class PlayitManager {
     this.state = this.secret ? "stopped" : "disabled";
     this.lastError = "";
     this.logs = [];
+    this.lastTunnelLogAt = 0;
   }
 
   start() {
@@ -70,6 +71,11 @@ export class PlayitManager {
     const raw = String(value || "");
     const safe = (this.secret ? raw.replaceAll(this.secret, "[secret]") : raw).trim();
     if (!safe) return;
+    if (/tunnel running, \d+ tunnels? registered/i.test(safe)) {
+      const now = Date.now();
+      if (now - this.lastTunnelLogAt < 60000) return;
+      this.lastTunnelLogAt = now;
+    }
     this.logs.push(safe);
     if (this.logs.length > 100) this.logs.splice(0, this.logs.length - 100);
     console.log(`[playit] ${safe}`);

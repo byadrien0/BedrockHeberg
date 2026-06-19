@@ -197,6 +197,14 @@ export class MultiServerManager {
     this.runAutomaticBackups().catch(console.error);
   }
 
+  async shutdown() {
+    clearInterval(this.backupTimer);
+    this.backupTimer = null;
+    await Promise.all([...this.managers.values()].map((manager) => manager.stop().catch((error) => {
+      console.error(`Arret Bedrock incomplet: ${error.message}`);
+    })));
+  }
+
   async runAutomaticBackups(now = Date.now()) {
     for (const server of this.servers) {
       const policy = normalizeBackupPolicy(server.backupPolicy || {});
