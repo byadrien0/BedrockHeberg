@@ -369,8 +369,8 @@ function panelHtml(csrfToken = "") {
   <style>
     :root { --ink:#f7f8ff; --muted:#a8afc9; --bg:#111522; --panel:#272c42; --panel-2:#303650; --panel-3:#1c2234; --line:#394059; --blue:#5b8cff; --blue-2:#223763; --red:#ff5d62; --green:#54d18a; --amber:#f2b85b; --code:#111521; --soft:#202842; }
     * { box-sizing:border-box; }
-    body { margin:0; min-height:100vh; background:radial-gradient(circle at 80% 0%, rgba(91,140,255,.18), transparent 34%), var(--bg); color:var(--ink); font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing:0; }
-    body::before { content:""; position:fixed; inset:0; pointer-events:none; background:linear-gradient(90deg, rgba(15,18,30,.92) 0 310px, rgba(17,21,34,.68)), url("https://images.unsplash.com/photo-1607513746994-51f730a44832?auto=format&fit=crop&w=1800&q=70"); background-size:cover; background-position:center; opacity:.22; }
+    body { margin:0; min-height:100vh; background:#151820; color:var(--ink); font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; letter-spacing:0; }
+    body::before { content:""; position:fixed; inset:0; pointer-events:none; background-image:linear-gradient(rgba(255,255,255,.018) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.018) 1px, transparent 1px); background-size:32px 32px; }
     h1 { margin:0; font-size:32px; font-weight:900; }
     h2 { margin:0; font-size:18px; font-weight:900; }
     h3 { margin:0 0 10px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
@@ -387,7 +387,7 @@ function panelHtml(csrfToken = "") {
     .main { min-width:0; padding:22px 24px 36px; display:grid; gap:18px; align-content:start; }
     .view { display:none; }
     .view.active { display:grid; gap:18px; }
-    .overview-hero { min-height:120px; display:flex; align-items:flex-end; justify-content:space-between; gap:18px; padding:6px 0 0; }
+    .overview-hero { min-height:96px; display:flex; align-items:flex-end; justify-content:space-between; gap:18px; padding:6px 0 0; }
     .overview-hero p { margin:8px 0 0; color:var(--muted); font-weight:800; }
     .topbar { display:grid; gap:16px; padding:2px 0 0; }
     .crumb { min-height:0; padding:0; border:0; background:transparent; color:var(--muted); font-weight:800; display:flex; align-items:center; justify-content:flex-start; gap:8px; }
@@ -437,10 +437,7 @@ function panelHtml(csrfToken = "") {
     .pill.ok { color:#9ff0bd; border-color:#397e57; background:#203d31; }
     .pill.off { color:#ffb4b7; border-color:#7a3b43; background:#442a35; }
     .server-gallery { display:grid; gap:10px; align-items:start; }
-    .overview-board { display:grid; grid-template-columns:minmax(460px, 1fr) 360px; gap:16px; align-items:start; }
-    .create-card { border:1px solid #3a4260; border-radius:8px; background:#252c43; padding:16px; display:grid; gap:14px; }
-    .create-card .fields { grid-template-columns:minmax(0, 1fr) 112px; }
-    .create-card button.primary { width:100%; }
+    .overview-board { display:block; }
     .server-card { width:100%; min-height:86px; padding:14px; border:1px solid #3a4260; border-radius:8px; background:#242b42; display:grid; grid-template-columns:44px minmax(0, 1fr) auto; gap:14px; text-align:left; align-items:center; }
     .server-card:hover { background:#29314b; border-color:#4a5680; }
     .server-card.active { border-color:var(--blue); box-shadow:inset 4px 0 0 var(--blue); }
@@ -451,6 +448,8 @@ function panelHtml(csrfToken = "") {
     .server-card-meta { display:flex; flex-wrap:wrap; gap:10px; color:var(--muted); font-size:13px; font-weight:800; }
     .server-card-actions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
     .server-card-actions button { min-height:36px; padding:0 10px; }
+    .server-card-actions .danger-icon { width:36px; padding:0; color:#ff9b9f; background:transparent; border-color:#5d3b45; }
+    .server-card-actions .danger-icon:hover { color:#fff; background:#7b343e; border-color:#9a404b; }
     .server-stats { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
     .stat-box { min-height:54px; border-radius:7px; background:#242b42; padding:9px; }
     .stat-box span { display:block; color:var(--muted); font-size:11px; font-weight:900; text-transform:uppercase; }
@@ -467,7 +466,6 @@ function panelHtml(csrfToken = "") {
     .backup-list li { border:1px solid #3a4260; border-radius:8px; padding:12px; display:grid; gap:8px; background:#242b42; }
     .row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
     .form-grid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:14px; }
-    .resource-grid { display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:12px; margin-top:16px; }
     .file-layout { display:grid; grid-template-columns:minmax(240px, .75fr) minmax(360px, 1.25fr); gap:14px; }
     .file-toolbar { display:flex; gap:8px; margin-bottom:12px; }
     .file-list { display:grid; gap:8px; max-height:460px; overflow:auto; }
@@ -479,9 +477,23 @@ function panelHtml(csrfToken = "") {
     .tab-panel { display:none; }
     .tab-panel.active { display:block; }
     .tab-panel.split.active { display:grid; grid-template-columns:minmax(360px, .9fr) minmax(440px, 1.25fr); gap:18px; align-items:start; }
-    .toast { position:fixed; right:18px; bottom:18px; max-width:min(460px, calc(100vw - 36px)); border-radius:8px; border:1px solid #4a5576; background:#2e3654; color:#fff; padding:13px 15px; box-shadow:0 16px 40px rgba(0,0,0,.35); display:none; z-index:5; }
+    .toast { position:fixed; right:18px; bottom:18px; max-width:min(460px, calc(100vw - 36px)); border-radius:8px; border:1px solid #4a5576; background:#2e3654; color:#fff; padding:13px 15px; box-shadow:0 16px 40px rgba(0,0,0,.35); display:none; z-index:20; }
+    .toast.error { border-color:#8c424a; background:#482a31; }
+    .connection { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; font-weight:800; }
+    .connection-dot { width:8px; height:8px; border-radius:50%; background:var(--green); box-shadow:0 0 0 4px rgba(84,209,138,.12); }
+    .connection.offline .connection-dot { background:var(--red); box-shadow:0 0 0 4px rgba(255,93,98,.12); }
+    dialog.modal { width:min(520px, calc(100vw - 28px)); padding:0; color:var(--ink); background:#242936; border:1px solid #444c61; border-radius:8px; box-shadow:0 30px 80px rgba(0,0,0,.55); }
+    dialog.modal::backdrop { background:rgba(8,10,14,.76); backdrop-filter:blur(3px); }
+    .modal-head { min-height:62px; padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:12px; border-bottom:1px solid rgba(255,255,255,.07); }
+    .modal-body { padding:18px; display:grid; gap:16px; }
+    .modal-footer { padding:14px 18px; display:flex; justify-content:flex-end; gap:8px; border-top:1px solid rgba(255,255,255,.07); background:#20242f; }
+    .modal-copy { margin:0; color:#c3c9d8; line-height:1.55; }
+    .form-error { min-height:20px; margin:0; color:#ff9b9f; font-size:13px; font-weight:800; }
+    .empty-state { min-height:220px; display:grid; place-items:center; text-align:center; color:var(--muted); border:1px dashed #424a60; border-radius:8px; padding:28px; }
+    .empty-state > div { display:grid; justify-items:center; gap:10px; }
+    .empty-state svg { width:30px; height:30px; }
     @media (max-width: 1120px) { .shell { grid-template-columns:1fr; } .sidebar { position:relative; min-height:auto; max-height:none; } .dashboard, .tab-panel.split.active, .overview-board, .file-layout { grid-template-columns:1fr; } .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 620px) { .main { padding:14px; } .hero { display:grid; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; } .grid, .left-column .grid, .fields, .create-card .fields, .server-stats, .form-grid, .resource-grid { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .left-column .metric:nth-child(5) { grid-column:auto; } .actions button, .actions a.button { flex:1 1 auto; } }
+    @media (max-width: 620px) { .main { padding:14px; } .overview-hero, .hero { display:grid; align-items:start; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; overflow:auto; } .tab-list { flex-wrap:nowrap; } .grid, .left-column .grid, .fields, .server-stats, .form-grid { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .left-column .metric:nth-child(5) { grid-column:auto; } .actions button, .actions a.button { flex:1 1 auto; } .modal-footer { display:grid; grid-template-columns:1fr 1fr; } }
   </style>
 </head>
 <body>
@@ -506,6 +518,7 @@ function panelHtml(csrfToken = "") {
             <p>Choisis le serveur que tu veux gérer.</p>
           </div>
           <div class="actions">
+            <button class="primary" id="openCreateServer"><i data-lucide="plus"></i>Nouveau serveur</button>
             <span id="globalPill" class="pill off"><i data-lucide="server"></i><span>...</span></span>
             <button class="icon" id="refreshServers" title="Actualiser"><i data-lucide="refresh-cw"></i></button>
             <form method="post" action="/logout"><input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}"><button type="submit"><i data-lucide="log-out"></i>Sortir</button></form>
@@ -515,25 +528,11 @@ function panelHtml(csrfToken = "") {
         <section>
           <div class="head">
             <h2>Vue d’ensemble</h2>
-            <span class="muted">Tous tes serveurs</span>
+            <div class="connection" id="connectionStatus"><span class="connection-dot"></span><span>Panel connecté</span></div>
           </div>
           <div class="content">
             <div class="overview-board">
               <div class="server-gallery" id="serverGallery"></div>
-              <div class="create-card">
-                <h2>Créer un serveur</h2>
-                <div class="fields">
-                  <div>
-                    <label for="newName">Nom</label>
-                    <input id="newName" value="Nouveau serveur">
-                  </div>
-                  <div>
-                    <label for="newPort">Port</label>
-                    <input id="newPort" type="number" min="1" max="65534">
-                  </div>
-                </div>
-                <button class="primary" id="createServer"><i data-lucide="plus"></i>Créer</button>
-              </div>
             </div>
           </div>
         </section>
@@ -555,17 +554,17 @@ function panelHtml(csrfToken = "") {
             <span id="statePill" class="pill off"><i data-lucide="circle"></i><span>...</span></span>
             <button class="primary" id="startBtn"><i data-lucide="play"></i>Démarrer</button>
             <button class="amber" id="restartBtn"><i data-lucide="rotate-cw"></i>Redémarrer</button>
-            <button class="red" id="stopBtn"><i data-lucide="square"></i>Stop</button>
+            <button class="red" id="stopBtn"><i data-lucide="square"></i>Arrêter</button>
             <form method="post" action="/logout"><input type="hidden" name="_csrf" value="${escapeHtml(csrfToken)}"><button type="submit"><i data-lucide="log-out"></i>Sortir</button></form>
           </div>
         </div>
         <div class="tabs-nav">
           <div class="tab-list">
-            <button class="tab active" data-tab="overview">Overview</button>
+            <button class="tab active" data-tab="overview">Aperçu</button>
             <button class="tab" data-tab="console">Console</button>
-            <button class="tab" data-tab="config">Config</button>
-            <button class="tab" data-tab="backups">Backups</button>
-            <button class="tab" data-tab="files">Files</button>
+            <button class="tab" data-tab="config">Configuration</button>
+            <button class="tab" data-tab="backups">Sauvegardes</button>
+            <button class="tab" data-tab="files">Fichiers</button>
           </div>
           <div class="actions">
             <button class="blue" id="reinstallBtn"><i data-lucide="download"></i>Réinstaller</button>
@@ -603,21 +602,6 @@ function panelHtml(csrfToken = "") {
                 </div>
               </div>
               <label class="checkrow"><input id="serverAutoStart" type="checkbox"> Auto-start</label>
-              <h3 style="margin-top:16px">Ressources prévues</h3>
-              <div class="resource-grid">
-                <div>
-                  <label for="resourceRam">RAM MB</label>
-                  <input id="resourceRam" type="number" min="256" step="256">
-                </div>
-                <div>
-                  <label for="resourceCpu">CPU cores</label>
-                  <input id="resourceCpu" type="number" min="0.25" step="0.25">
-                </div>
-                <div>
-                  <label for="resourceStorage">Stockage GB</label>
-                  <input id="resourceStorage" type="number" min="1" step="1">
-                </div>
-              </div>
             </div>
           </section>
 
@@ -632,7 +616,7 @@ function panelHtml(csrfToken = "") {
               <div class="actions">
                 <button class="primary" id="overviewStartBtn"><i data-lucide="play"></i>Démarrer</button>
                 <button class="amber" id="overviewRestartBtn"><i data-lucide="rotate-cw"></i>Redémarrer</button>
-                <button class="red" id="overviewStopBtn"><i data-lucide="square"></i>Stop</button>
+                <button class="red" id="overviewStopBtn"><i data-lucide="square"></i>Arrêter</button>
               </div>
             </div>
           </section>
@@ -669,12 +653,12 @@ function panelHtml(csrfToken = "") {
                 <div><label for="propDifficulty">Difficulté</label><select id="propDifficulty"><option>peaceful</option><option>easy</option><option>normal</option><option>hard</option></select></div>
                 <div><label for="propMaxPlayers">Max players</label><input id="propMaxPlayers" type="number" min="1"></div>
                 <div><label for="propAllowCheats">Cheats</label><select id="propAllowCheats"><option value="false">False</option><option value="true">True</option></select></div>
-                <div><label for="propOnlineMode">Online mode</label><select id="propOnlineMode"><option value="true">True</option><option value="false">False</option></select></div>
-                <div><label for="propAllowList">Allow list</label><select id="propAllowList"><option value="false">False</option><option value="true">True</option></select></div>
-                <div><label for="propForceGamemode">Force gamemode</label><select id="propForceGamemode"><option value="false">False</option><option value="true">True</option></select></div>
-                <div><label for="propLanVisibility">LAN visibility</label><select id="propLanVisibility"><option value="false">False</option><option value="true">True</option></select></div>
-                <div><label for="propViewDistance">View distance</label><input id="propViewDistance" type="number" min="1"></div>
-                <div><label for="propTickDistance">Tick distance</label><input id="propTickDistance" type="number" min="1"></div>
+                <div><label for="propOnlineMode">Mode en ligne</label><select id="propOnlineMode"><option value="true">Activé</option><option value="false">Désactivé</option></select></div>
+                <div><label for="propAllowList">Liste blanche</label><select id="propAllowList"><option value="false">Désactivée</option><option value="true">Activée</option></select></div>
+                <div><label for="propForceGamemode">Forcer le mode de jeu</label><select id="propForceGamemode"><option value="false">Non</option><option value="true">Oui</option></select></div>
+                <div><label for="propLanVisibility">Visibilité réseau local</label><select id="propLanVisibility"><option value="false">Désactivée</option><option value="true">Activée</option></select></div>
+                <div><label for="propViewDistance">Distance d’affichage</label><input id="propViewDistance" type="number" min="1"></div>
+                <div><label for="propTickDistance">Distance de simulation</label><input id="propTickDistance" type="number" min="1"></div>
               </div>
             </div>
           </section>
@@ -695,7 +679,7 @@ function panelHtml(csrfToken = "") {
       <div class="tab-panel" data-panel="files">
         <section>
           <div class="head">
-            <h2>Files</h2>
+            <h2>Fichiers</h2>
             <div class="actions">
               <button class="primary" id="saveFile"><i data-lucide="save"></i>Enregistrer</button>
               <button class="red" id="deleteFile"><i data-lucide="trash-2"></i>Supprimer</button>
@@ -722,6 +706,69 @@ function panelHtml(csrfToken = "") {
       </div>
     </main>
   </div>
+  <dialog class="modal" id="createServerModal">
+    <form id="createServerForm">
+      <div class="modal-head">
+        <h2>Créer un serveur</h2>
+        <button class="icon" type="button" data-close-modal="createServerModal" title="Fermer"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label for="newName">Nom du serveur</label>
+          <input id="newName" value="Nouveau serveur" maxlength="80" autocomplete="off" required>
+        </div>
+        <div>
+          <label for="newPort">Port</label>
+          <input id="newPort" type="number" min="1" max="65534" required>
+        </div>
+        <p class="form-error" id="createServerError"></p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" data-close-modal="createServerModal">Annuler</button>
+        <button class="primary" id="createServer" type="submit"><i data-lucide="plus"></i>Créer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="confirmationModal">
+    <form id="confirmationForm">
+      <div class="modal-head">
+        <h2 id="confirmationTitle">Confirmer l’action</h2>
+        <button class="icon" type="button" id="confirmationClose" title="Fermer"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-copy" id="confirmationMessage"></p>
+        <div>
+          <label for="confirmationInput" id="confirmationLabel">Confirmation</label>
+          <input id="confirmationInput" autocomplete="off">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="confirmationCancel">Annuler</button>
+        <button class="red" id="confirmationSubmit" type="submit">Confirmer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="textInputModal">
+    <form id="textInputForm">
+      <div class="modal-head">
+        <h2 id="textInputTitle">Nouvel élément</h2>
+        <button class="icon" type="button" id="textInputClose" title="Fermer"><i data-lucide="x"></i></button>
+      </div>
+      <div class="modal-body">
+        <div>
+          <label for="textInputValue" id="textInputLabel">Nom</label>
+          <input id="textInputValue" autocomplete="off" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="textInputCancel">Annuler</button>
+        <button class="primary" type="submit">Créer</button>
+      </div>
+    </form>
+  </dialog>
+
   <div class="toast" id="toast"></div>
 
 <script>
@@ -740,10 +787,18 @@ async function api(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
   const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) headers["x-csrf-token"] = CSRF_TOKEN;
-  const res = await fetch(path, {
-    headers,
-    ...options
-  });
+  let res;
+  try {
+    res = await fetch(path, { headers, ...options });
+    setConnectionState(true);
+  } catch (_error) {
+    setConnectionState(false);
+    throw new Error("Le panel ne répond plus. Vérifie que le service est démarré.");
+  }
+  if (res.status === 401) {
+    window.location.assign("/login");
+    throw new Error("Session expirée.");
+  }
   const text = await res.text();
   const data = text ? JSON.parse(text) : {};
   if (!res.ok) throw new Error(data.error || "Erreur HTTP " + res.status);
@@ -759,12 +814,20 @@ function escapeHtmlClient(value) {
     .replaceAll("'", "&#039;");
 }
 
-function toast(message) {
+function toast(message, type = "success") {
   const box = $("toast");
   box.textContent = message;
+  box.className = "toast " + type;
   box.style.display = "block";
   clearTimeout(window.toastTimer);
   window.toastTimer = setTimeout(() => { box.style.display = "none"; }, 4200);
+}
+
+function setConnectionState(connected) {
+  const status = $("connectionStatus");
+  if (!status) return;
+  status.classList.toggle("offline", !connected);
+  status.querySelector("span:last-child").textContent = connected ? "Panel connecté" : "Panel hors ligne";
 }
 
 function setBusy(value) {
@@ -818,7 +881,7 @@ function renderServerGallery() {
   target.innerHTML = servers.map((server) => {
     const status = server.status || {};
     const active = server.id === activeId ? " active" : "";
-    const pill = status.running ? '<span class="pill ok">Online</span>' : '<span class="pill off">Offline</span>';
+    const pill = status.running ? '<span class="pill ok">En ligne</span>' : '<span class="pill off">Arrêté</span>';
     const port = escapeHtmlClient(status.gamePort || "-");
     const world = escapeHtmlClient(status.worldName || "-");
     const address = escapeHtmlClient(serverAddress(status));
@@ -830,10 +893,10 @@ function renderServerGallery() {
       '</div>' +
       '<div class="server-card-actions">' +
         '<button data-server="' + escapeHtmlClient(server.id) + '"><i data-lucide="settings"></i>Gérer</button>' +
-        '<button class="red" data-delete-server="' + escapeHtmlClient(server.id) + '"><i data-lucide="trash-2"></i>Supprimer</button>' +
+        '<button class="danger-icon" data-delete-server="' + escapeHtmlClient(server.id) + '" title="Supprimer ' + escapeHtmlClient(server.name) + '"><i data-lucide="trash-2"></i></button>' +
       '</div>' +
     '</article>';
-  }).join("") || '<div class="muted">Aucun serveur.</div>';
+  }).join("") || '<div class="empty-state"><div><i data-lucide="server-off"></i><strong>Aucun serveur</strong><span>Crée ta première instance Bedrock.</span></div></div>';
   target.querySelectorAll("[data-server]").forEach((button) => {
     button.onclick = () => openServer(button.dataset.server);
   });
@@ -931,17 +994,18 @@ function renderActive() {
   $("serverName").value = server.name;
   $("serverPort").value = status.gamePort || "";
   $("serverAutoStart").checked = Boolean(server.autoStart);
-  $("resourceRam").value = server.resources?.ramMb || 2048;
-  $("resourceCpu").value = server.resources?.cpuCores || 1;
-  $("resourceStorage").value = server.resources?.storageGb || 5;
   ["startBtn", "restartBtn", "stopBtn", "reinstallBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile"].forEach((id) => {
     $(id).disabled = false;
   });
   ["overviewStartBtn", "overviewRestartBtn", "overviewStopBtn"].forEach((id) => {
     $(id).disabled = false;
   });
+  ["startBtn", "overviewStartBtn"].forEach((id) => { $(id).disabled = Boolean(status.running); });
+  ["restartBtn", "stopBtn", "overviewRestartBtn", "overviewStopBtn", "sendCommand"].forEach((id) => {
+    $(id).disabled = !status.running;
+  });
   $("statePill").className = "pill " + (status.running ? "ok" : "off");
-  $("statePill").querySelector("span").textContent = status.running ? "En ligne" : "Arrêté";
+  $("statePill").querySelector("span").textContent = status.error ? "Erreur" : (status.running ? "En ligne" : "Arrêté");
   $("gamePort").textContent = status.gamePort || "-";
   $("serverAddress").textContent = serverAddress(status);
   $("worldName").textContent = status.worldName || "-";
@@ -963,9 +1027,9 @@ async function refreshActive() {
   renderGlobalPill();
   renderServerGallery();
   renderActive();
-  await refreshLogs();
-  await refreshBackups();
-  if (loadedPropertiesFor !== activeId) await loadProperties();
+  if (detailTab === "console") await refreshLogs();
+  if (detailTab === "backups") await refreshBackups();
+  if (detailTab === "config" && loadedPropertiesFor !== activeId) await loadProperties();
 }
 
 async function refreshLogs() {
@@ -1083,15 +1147,51 @@ function parentPath(path) {
   return parts.join("/");
 }
 
-function requireTypedConfirmation(message, expected) {
-  const value = prompt(message + "\\n\\nTape exactement: " + expected);
-  return value === expected;
+let confirmationResolver = null;
+let textInputResolver = null;
+let confirmationExpected = "";
+
+function finishConfirmation(result) {
+  if (!confirmationResolver) return;
+  const resolve = confirmationResolver;
+  confirmationResolver = null;
+  $("confirmationModal").close();
+  resolve(result);
+}
+
+function requireTypedConfirmation(message, expected, title = "Confirmer l’action") {
+  confirmationExpected = expected;
+  $("confirmationTitle").textContent = title;
+  $("confirmationMessage").textContent = message;
+  $("confirmationLabel").textContent = "Saisis « " + expected + " » pour confirmer";
+  $("confirmationInput").value = "";
+  $("confirmationSubmit").disabled = true;
+  $("confirmationModal").showModal();
+  $("confirmationInput").focus();
+  return new Promise((resolve) => { confirmationResolver = resolve; });
+}
+
+function finishTextInput(value) {
+  if (!textInputResolver) return;
+  const resolve = textInputResolver;
+  textInputResolver = null;
+  $("textInputModal").close();
+  resolve(value);
+}
+
+function requestTextInput(title, label) {
+  $("textInputTitle").textContent = title;
+  $("textInputLabel").textContent = label;
+  $("textInputValue").value = "";
+  $("textInputModal").showModal();
+  $("textInputValue").focus();
+  return new Promise((resolve) => { textInputResolver = resolve; });
 }
 
 async function deleteServerById(id) {
   const server = servers.find((item) => item.id === id);
   if (!server) return;
-  if (!requireTypedConfirmation("Supprimer " + server.name + " avec ses fichiers et sauvegardes ?", server.name)) return;
+  if (!await requireTypedConfirmation("Le serveur, ses fichiers et ses sauvegardes seront définitivement supprimés.", server.name, "Supprimer " + server.name)) return;
   await action("Serveur supprime.", async () => {
     const previousActive = activeId;
     activeId = server.id;
@@ -1115,12 +1215,47 @@ async function action(label, fn, options = {}) {
     toast(label);
     await refreshServers();
   } catch (error) {
-    toast(error.message);
+    toast(error.message, "error");
   } finally {
     setBusy(false);
     renderActive();
   }
 }
+
+document.querySelectorAll("[data-close-modal]").forEach((button) => {
+  button.onclick = () => $(button.dataset.closeModal).close();
+});
+$("openCreateServer").onclick = () => {
+  $("createServerError").textContent = "";
+  $("newPort").value = nextFreePort();
+  $("createServerModal").showModal();
+  $("newName").focus();
+  $("newName").select();
+};
+$("confirmationInput").oninput = () => {
+  $("confirmationSubmit").disabled = $("confirmationInput").value !== confirmationExpected;
+};
+$("confirmationForm").onsubmit = (event) => {
+  event.preventDefault();
+  if (!$("confirmationSubmit").disabled) finishConfirmation(true);
+};
+$("confirmationCancel").onclick = () => finishConfirmation(false);
+$("confirmationClose").onclick = () => finishConfirmation(false);
+$("confirmationModal").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  finishConfirmation(false);
+});
+$("textInputForm").onsubmit = (event) => {
+  event.preventDefault();
+  const value = $("textInputValue").value.trim();
+  if (value) finishTextInput(value);
+};
+$("textInputCancel").onclick = () => finishTextInput("");
+$("textInputClose").onclick = () => finishTextInput("");
+$("textInputModal").addEventListener("cancel", (event) => {
+  event.preventDefault();
+  finishTextInput("");
+});
 
 $("refreshServers").onclick = () => refreshServers().catch((error) => toast(error.message));
 $("refreshDetail").onclick = () => refreshActive().catch((error) => toast(error.message));
@@ -1135,8 +1270,8 @@ $("restartBtn").onclick = () => action("Serveur redémarré.", () => api(endpoin
 $("overviewStartBtn").onclick = () => action("Serveur démarré.", () => api(endpoint("/start"), { method:"POST" }));
 $("overviewStopBtn").onclick = () => action("Serveur arrêté.", () => api(endpoint("/stop"), { method:"POST" }));
 $("overviewRestartBtn").onclick = () => action("Serveur redémarré.", () => api(endpoint("/restart"), { method:"POST" }));
-$("reinstallBtn").onclick = () => {
-  if (!requireTypedConfirmation("Reinstaller ce serveur et creer une sauvegarde avant ?", "REINSTALL")) return;
+$("reinstallBtn").onclick = async () => {
+  if (!await requireTypedConfirmation("Une sauvegarde sera créée avant de réinstaller les fichiers du serveur.", "REINSTALL", "Réinstaller le serveur")) return;
   action("Reinstallation terminee.", () => api(endpoint("/reinstall"), { method:"POST", body: JSON.stringify({ confirm: "REINSTALL" }) }));
 };
 $("sendCommand").onclick = () => {
@@ -1155,12 +1290,7 @@ $("saveServer").onclick = () => action("Serveur modifié.", () => api(endpoint("
   body: JSON.stringify({
     name: $("serverName").value,
     port: $("serverPort").value,
-    autoStart: $("serverAutoStart").checked,
-    resources: {
-      ramMb: $("resourceRam").value,
-      cpuCores: $("resourceCpu").value,
-      storageGb: $("resourceStorage").value
-    }
+    autoStart: $("serverAutoStart").checked
   })
 }));
 $("deleteServer").onclick = () => {
@@ -1169,15 +1299,28 @@ $("deleteServer").onclick = () => {
   deleteServerById(server.id);
 };
 
-$("createServer").onclick = () => {
+$("createServerForm").onsubmit = (event) => {
+  event.preventDefault();
+  const name = $("newName").value.trim();
+  const port = Number($("newPort").value);
+  if (!name) {
+    $("createServerError").textContent = "Le nom du serveur est obligatoire.";
+    return;
+  }
+  if (!Number.isInteger(port) || port < 1 || port > 65534) {
+    $("createServerError").textContent = "Choisis un port compris entre 1 et 65534.";
+    return;
+  }
+  $("createServerError").textContent = "";
   action("Serveur créé.", async () => {
     const data = await api("/api/servers", {
       method:"POST",
       body: JSON.stringify({
-        name: $("newName").value,
-        port: $("newPort").value
+        name,
+        port
       })
     });
+    $("createServerModal").close();
     activeId = data.server.id;
     localStorage.setItem("bedrockActiveServer", activeId);
     viewMode = "detail";
@@ -1188,14 +1331,14 @@ $("createServer").onclick = () => {
 };
 
 $("goUpFile").onclick = () => loadFiles(parentPath(currentFilePath)).catch((error) => toast(error.message));
-$("newDirectory").onclick = () => {
-  const name = prompt("Nom du dossier");
+$("newDirectory").onclick = async () => {
+  const name = await requestTextInput("Nouveau dossier", "Nom du dossier");
   if (!name) return;
   const target = [currentFilePath, name].filter(Boolean).join("/");
   action("Dossier créé.", () => api(endpoint("/directory"), { method:"POST", body: JSON.stringify({ path: target }) }).then(() => loadFiles(currentFilePath)));
 };
-$("newFile").onclick = () => {
-  const name = prompt("Nom du fichier");
+$("newFile").onclick = async () => {
+  const name = await requestTextInput("Nouveau fichier", "Nom du fichier");
   if (!name) return;
   const target = [currentFilePath, name].filter(Boolean).join("/");
   action("Fichier créé.", () => api(endpoint("/file"), { method:"PUT", body: JSON.stringify({ path: target, content: "" }) }).then(() => loadFiles(currentFilePath)));
@@ -1204,9 +1347,9 @@ $("saveFile").onclick = () => {
   if (!selectedFilePath) return toast("Sélectionne un fichier.");
   action("Fichier enregistré.", () => api(endpoint("/file"), { method:"PUT", body: JSON.stringify({ path: selectedFilePath, content: $("fileEditor").value }) }));
 };
-$("deleteFile").onclick = () => {
+$("deleteFile").onclick = async () => {
   if (!selectedFilePath) return toast("Sélectionne un fichier.");
-  if (!requireTypedConfirmation("Supprimer " + selectedFilePath + " ?", selectedFilePath)) return;
+  if (!await requireTypedConfirmation("Le fichier sera définitivement supprimé.", selectedFilePath, "Supprimer le fichier")) return;
   action("Fichier supprime.", () => api(endpoint("/file?path=") + encodeURIComponent(selectedFilePath), { method:"DELETE", body: JSON.stringify({ confirm: selectedFilePath }) }).then(() => {
     selectedFilePath = "";
     $("fileEditorPath").value = "";
@@ -1215,12 +1358,12 @@ $("deleteFile").onclick = () => {
   }));
 };
 
-window.restoreBackup = (name) => {
-  if (!requireTypedConfirmation("Restaurer " + name + " ? Le serveur sera arrete pendant la restauration.", "RESTORE")) return;
+window.restoreBackup = async (name) => {
+  if (!await requireTypedConfirmation("Le serveur sera arrêté pendant la restauration de " + name + ".", "RESTORE", "Restaurer la sauvegarde")) return;
   action("Sauvegarde restauree.", () => api(endpoint("/backups/") + encodeURIComponent(name) + "/restore", { method:"POST", body: JSON.stringify({ confirm: "RESTORE" }) }));
 };
-window.deleteBackup = (name) => {
-  if (!requireTypedConfirmation("Supprimer " + name + " ?", name)) return;
+window.deleteBackup = async (name) => {
+  if (!await requireTypedConfirmation("La sauvegarde sera définitivement supprimée.", name, "Supprimer la sauvegarde")) return;
   action("Sauvegarde supprimee.", () => api(endpoint("/backups/") + encodeURIComponent(name), { method:"DELETE", body: JSON.stringify({ confirm: name }) }));
 };
 

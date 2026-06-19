@@ -174,7 +174,13 @@ export class MultiServerManager {
       version: 1,
       servers: this.servers.map(normalizeServer)
     };
-    await fsp.writeFile(this.configPath, JSON.stringify(data, null, 2), "utf8");
+    const temporaryPath = `${this.configPath}.${process.pid}.tmp`;
+    await fsp.writeFile(temporaryPath, JSON.stringify(data, null, 2), "utf8");
+    try {
+      await fsp.rename(temporaryPath, this.configPath);
+    } finally {
+      await fsp.rm(temporaryPath, { force: true }).catch(() => {});
+    }
   }
 
   rebuildManagers() {
@@ -377,6 +383,8 @@ function defaultSeedDir(rootDir) {
   }
   return path.join(rootDir, "seed");
 }
+
+export { cleanName, normalizeResources, setProperty, slugify, validatePort };
 
 function isInside(parent, child) {
   const relative = path.relative(path.resolve(parent), path.resolve(child));

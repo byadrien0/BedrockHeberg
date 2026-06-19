@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check": "node --check src/server.js && node --check src/bedrock-manager.js && node --check src/multi-server-manager.js",
+    "test": "node test/multi-server-manager.test.js",
     "start": "node src/server.js"
   },
   "dependencies": {
