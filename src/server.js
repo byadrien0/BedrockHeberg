@@ -822,6 +822,7 @@ function panelHtml(csrfToken = "") {
             <button class="tab active" data-tab="overview">Aperçu</button>
             <button class="tab" data-tab="console" data-requires-first-run>Console</button>
             <button class="tab" data-tab="config" data-requires-first-run>Configuration</button>
+            <button class="tab" data-tab="performance">Performances</button>
             <button class="tab" data-tab="players" data-requires-first-run>Joueurs</button>
             <button class="tab" data-tab="worlds" data-requires-first-run>Mondes</button>
             <button class="tab" data-tab="activity">Activité</button>
@@ -878,21 +879,30 @@ function panelHtml(csrfToken = "") {
                 </div>
               </div>
               <label class="checkrow" data-requires-first-run><input id="serverAutoStart" type="checkbox"> Démarrage automatique</label>
-              <div class="install-panel" style="margin-top:16px">
-                <div class="row"><strong>Performances</strong><span class="badge" id="performanceBadge">Équilibré</span></div>
-                <div class="form-grid">
-                  <div><label for="performanceProfile">Profil</label><select id="performanceProfile"><option value="economy">Économie</option><option value="balanced">Équilibré</option><option value="performance">Performance</option><option value="custom">Personnalisé</option></select></div>
-                  <div><label for="resourceRam">RAM allouée (Mo)</label><input id="resourceRam" type="number" min="256" max="131072" step="256" title="Budget RAM du serveur Bedrock"></div>
-                  <div><label for="resourceCpu">Cœurs CPU</label><input id="resourceCpu" type="number" min="0.25" max="64" step="0.25"></div>
-                  <div><label for="resourceStorage">Stockage maximal (Go)</label><input id="resourceStorage" type="number" min="1" max="4096"></div>
-                  <div><label for="resourceViewDistance">Distance d’affichage</label><input id="resourceViewDistance" type="number" min="5" max="96"></div>
-                  <div><label for="resourceTickDistance">Distance de simulation</label><input id="resourceTickDistance" type="number" min="4" max="12"></div>
-                </div>
-              </div>
             </div>
           </section>
 
         </div>
+      </div>
+
+      <div class="tab-panel" data-panel="performance">
+        <section>
+          <div class="head">
+            <h2>Performances</h2>
+            <button class="primary" id="savePerformance"><i data-lucide="save"></i>Enregistrer</button>
+          </div>
+          <div class="content">
+            <div class="row" style="margin-bottom:16px"><strong>Ressources du serveur</strong><span class="badge" id="performanceBadge">Équilibré</span></div>
+            <div class="form-grid">
+              <div><label for="performanceProfile">Profil</label><select id="performanceProfile"><option value="economy">Économie</option><option value="balanced">Équilibré</option><option value="performance">Performance</option><option value="custom">Personnalisé</option></select></div>
+              <div><label for="resourceRam">RAM allouée (Mo)</label><input id="resourceRam" type="number" min="256" max="131072" step="256" title="Budget RAM du serveur Bedrock"></div>
+              <div><label for="resourceCpu">Cœurs CPU</label><input id="resourceCpu" type="number" min="0.25" max="64" step="0.25"></div>
+              <div><label for="resourceStorage">Stockage maximal (Go)</label><input id="resourceStorage" type="number" min="1" max="4096"></div>
+              <div><label for="resourceViewDistance">Distance d’affichage</label><input id="resourceViewDistance" type="number" min="5" max="96"></div>
+              <div><label for="resourceTickDistance">Distance de simulation</label><input id="resourceTickDistance" type="number" min="4" max="12"></div>
+            </div>
+          </div>
+        </section>
       </div>
 
       <div class="tab-panel" data-panel="console">
@@ -1417,7 +1427,7 @@ function renderActive() {
     $("logs").textContent = "";
     clearPropertyForm();
     $("backupList").innerHTML = '<li><span class="muted">Aucun serveur sélectionné.</span></li>';
-  ["startBtn", "restartBtn", "stopBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile", "installServer", "updateServer"].forEach((id) => {
+  ["startBtn", "restartBtn", "stopBtn", "saveServer", "savePerformance", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile", "installServer", "updateServer"].forEach((id) => {
     $(id).disabled = true;
   });
     lucide.createIcons();
@@ -1430,7 +1440,7 @@ function renderActive() {
   $("serverPort").value = status.gamePort || "";
   $("serverAutoStart").checked = Boolean(server.autoStart);
   setPerformanceForm(server.resources || { performanceProfile:"balanced" });
-  ["startBtn", "restartBtn", "stopBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile", "installServer", "updateServer"].forEach((id) => {
+  ["startBtn", "restartBtn", "stopBtn", "saveServer", "savePerformance", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile", "installServer", "updateServer"].forEach((id) => {
     $(id).disabled = false;
   });
   $("startBtn").disabled = Boolean(status.running);
@@ -1989,9 +1999,12 @@ $("saveServer").onclick = () => action("Serveur modifié.", () => api(endpoint("
   body: JSON.stringify({
     name: $("serverName").value,
     port: $("serverPort").value,
-    autoStart: $("serverAutoStart").checked,
-    resources: collectPerformanceForm()
+    autoStart: $("serverAutoStart").checked
   })
+}));
+$("savePerformance").onclick = () => action("Performances enregistrées. Redémarre le serveur pour appliquer les changements.", () => api(endpoint(""), {
+  method:"PATCH",
+  body:JSON.stringify({ resources:collectPerformanceForm() })
 }));
 $("performanceProfile").onchange = () => {
   const profile = $("performanceProfile").value;

@@ -25,6 +25,8 @@ try {
       assert.equal(await page.getByRole("button", { name:"Mondes" }).isVisible(), false);
       assert.equal(await page.getByRole("button", { name:"Console" }).isVisible(), false);
     }
+    await page.getByRole("button", { name:"Performances" }).click();
+    await page.locator('[data-panel="performance"].active').waitFor();
     await page.locator("#performanceProfile").selectOption("performance");
     assert.equal(await page.locator("#resourceRam").inputValue(), "4096");
     assert.equal(await page.locator("#resourceCpu").inputValue(), "4");
