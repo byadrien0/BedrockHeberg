@@ -4,8 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "node --check src/server.js && node --check src/bedrock-manager.js && node --check src/multi-server-manager.js",
-    "test": "node test/multi-server-manager.test.js",
+    "check": "node --check src/server.js && node --check src/bedrock-manager.js && node --check src/multi-server-manager.js && node --check src/activity-store.js && node --check src/user-store.js",
+    "test": "node test/run-tests.js",
+    "test:api": "node test/api-smoke.js",
+    "test:browser": "node test/browser-smoke.js",
     "start": "node src/server.js"
   },
   "dependencies": {
@@ -13,9 +15,13 @@
     "express": "^4.19.2",
     "express-session": "^1.18.0",
     "lucide": "^1.21.0",
+    "multer": "^2.2.0",
     "unzipper": "^0.12.3"
   },
   "engines": {
     "node": ">=20"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.61.0"
   }
 }

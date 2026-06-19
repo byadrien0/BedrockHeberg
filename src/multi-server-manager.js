@@ -10,6 +10,7 @@ export class MultiServerManager {
     this.rootDir = options.rootDir;
     this.autoStart = options.autoStart;
     this.downloadUrl = options.downloadUrl || "";
+    this.onActivity = options.onActivity || (() => {});
     this.seedDir = path.resolve(options.seedDir || defaultSeedDir(options.rootDir));
     this.legacyServerDir = path.resolve(options.serverDir || defaultLegacyServerDir(options.rootDir));
     this.instancesRoot = path.resolve(options.instancesRoot || defaultInstancesRoot(options.rootDir));
@@ -18,6 +19,7 @@ export class MultiServerManager {
     this.configPath = path.join(this.configDir, "servers.json");
     this.servers = [];
     this.managers = new Map();
+    this.backupTimer = null;
   }
 
   async initialize() {
@@ -34,6 +36,8 @@ export class MultiServerManager {
         seedDir: this.seedDir,
         autoStart: this.autoStart,
         resources: defaultResources(),
+        backupPolicy: defaultBackupPolicy(),
+        lastAutomaticBackupAt: "",
         createdAt: new Date().toISOString()
       });
       await this.saveConfig();
@@ -99,6 +103,8 @@ export class MultiServerManager {
       seedDir,
       autoStart: Boolean(input.autoStart),
       resources: defaultResources(),
+      backupPolicy: defaultBackupPolicy(),
+      lastAutomaticBackupAt: "",
       createdAt: new Date().toISOString()
     };
     this.servers.push(server);
@@ -130,6 +136,7 @@ export class MultiServerManager {
     if (input.resources) {
       meta.resources = normalizeResources(input.resources);
     }
+    if (input.backupPolicy) meta.backupPolicy = normalizeBackupPolicy(input.backupPolicy);
     if (input.port !== undefined && input.port !== "") {
       const port = Number(input.port);
       validatePort(port);
@@ -164,6 +171,32 @@ export class MultiServerManager {
       this.requireManager(server.id).start().catch((error) => {
         console.error(`Demarrage ${server.name} impossible: ${error.message}`);
       });
+    }
+  }
+
+  startBackupScheduler() {
+    if (this.backupTimer) clearInterval(this.backupTimer);
+    this.backupTimer = setInterval(() => this.runAutomaticBackups().catch(console.error), 60000);
+    this.backupTimer.unref?.();
+    this.runAutomaticBackups().catch(console.error);
+  }
+
+  async runAutomaticBackups(now = Date.now()) {
+    for (const server of this.servers) {
+      const policy = normalizeBackupPolicy(server.backupPolicy || {});
+      if (!policy.enabled) continue;
+      const previous = Date.parse(server.lastAutomaticBackupAt || "") || 0;
+      if (now - previous < policy.intervalMinutes * 60000) continue;
+      const manager = this.requireManager(server.id);
+      try {
+        const backup = await manager.runOperation("backing-up", () => manager.createBackup("automatic"));
+        await manager.enforceBackupRetention(policy.retention);
+        server.lastAutomaticBackupAt = new Date(now).toISOString();
+        await this.saveConfig();
+        await this.onActivity({ serverId: server.id, action: "backup.automatic", message: backup.name });
+      } catch (error) {
+        await this.onActivity({ serverId: server.id, action: "backup.automatic", status: "error", message: error.message });
+      }
     }
   }
 
@@ -295,6 +328,8 @@ function normalizeServer(server) {
     seedDir: server.seedDir ? path.resolve(server.seedDir) : undefined,
     autoStart: Boolean(server.autoStart),
     resources: normalizeResources(server.resources || {}),
+    backupPolicy: normalizeBackupPolicy(server.backupPolicy || {}),
+    lastAutomaticBackupAt: server.lastAutomaticBackupAt || "",
     createdAt: server.createdAt || new Date().toISOString()
   };
 }
@@ -307,6 +342,8 @@ function publicServer(server) {
     backupDir: server.backupDir,
     autoStart: server.autoStart,
     resources: normalizeResources(server.resources || {}),
+    backupPolicy: normalizeBackupPolicy(server.backupPolicy || {}),
+    lastAutomaticBackupAt: server.lastAutomaticBackupAt || "",
     createdAt: server.createdAt,
     protected: false
   };
@@ -314,6 +351,19 @@ function publicServer(server) {
 
 function defaultResources() {
   return { ramMb: 2048, cpuCores: 1, storageGb: 5 };
+}
+
+function defaultBackupPolicy() {
+  return { enabled: false, intervalMinutes: 360, retention: 10 };
+}
+
+function normalizeBackupPolicy(policy) {
+  const defaults = defaultBackupPolicy();
+  return {
+    enabled: Boolean(policy.enabled),
+    intervalMinutes: clampInt(policy.intervalMinutes, 15, 43200, defaults.intervalMinutes),
+    retention: clampInt(policy.retention, 1, 100, defaults.retention)
+  };
 }
 
 function normalizeResources(resources) {
@@ -392,7 +442,7 @@ function defaultSeedDir(rootDir) {
   return path.join(rootDir, "seed");
 }
 
-export { cleanName, normalizeResources, setProperty, slugify, validatePort };
+export { cleanName, normalizeBackupPolicy, normalizeResources, setProperty, slugify, validatePort };
 
 function isInside(parent, child) {
   const relative = path.relative(path.resolve(parent), path.resolve(child));

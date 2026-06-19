@@ -7,8 +7,14 @@ Cette app lance et gere plusieurs serveurs Minecraft Bedrock Dedicated Server av
 - creation, modification et suppression de serveurs;
 - demarrage, arret, redemarrage par serveur;
 - console Bedrock par serveur;
+- console temps reel SSE, recherche et historique des commandes;
 - edition de `server.properties` par serveur;
-- sauvegardes zip, telechargement, restauration, suppression;
+- sauvegardes manuelles et automatiques avec retention;
+- joueurs, liste blanche et permissions Bedrock;
+- import, export, duplication, activation et restauration de mondes;
+- upload, telechargement et renommage de fichiers;
+- comptes administrateur/lecture seule et TOTP facultatif;
+- historique persistant des operations;
 - reinstallation du binaire Bedrock Linux officiel;
 - copie initiale optionnelle depuis un dossier seed vers un volume persistant.
 
@@ -24,6 +30,7 @@ SERVER_DIR=/data/servers/principal
 SERVERS_DIR=/data/servers
 BACKUP_ROOT=/data/backups
 SEED_DIR=/opt/bedrock-seed
+PUBLIC_IP=adresse-publique-optionnelle
 ```
 
 Monte un volume Railway sur `/data`, sinon les mondes, la liste des serveurs et les sauvegardes peuvent disparaitre a chaque redeploiement.
@@ -44,6 +51,18 @@ Minecraft Bedrock utilise UDP. Chaque serveur doit avoir son propre port, par ex
 4. Ajoute les variables ci-dessus.
 5. Genere le domaine Railway pour l'interface web.
 6. Connecte-toi a l'interface avec `ADMIN_PASSWORD`.
+
+Le premier compte est `admin`. Les comptes suivants et la 2FA se gerent depuis l'onglet `Comptes`.
+
+## Tests
+
+```text
+npm test
+npm run test:api
+npm run test:browser
+```
+
+Les tests API et navigateur attendent le panel sur `http://127.0.0.1:3001` avec le mot de passe local `admin`, sauf si `TEST_BASE_URL` et `TEST_ADMIN_PASSWORD` sont definis.
 
 Au premier demarrage, l'app cree un serveur `principal`, copie les donnees presentes dans `SEED_DIR` si ce dossier existe, telecharge le serveur Bedrock Linux officiel, puis lance les serveurs en auto-start.
 

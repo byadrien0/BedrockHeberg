@@ -4,12 +4,16 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
+import os from "node:os";
 import { fileURLToPath } from "node:url";
+import multer from "multer";
 import { MultiServerManager } from "./multi-server-manager.js";
+import { ActivityStore } from "./activity-store.js";
+import { UserStore } from "./user-store.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
-const port = Number(process.env.PORT || 3000);
+const port = Number(process.env.PORT || 3001);
 const isProduction = process.env.NODE_ENV === "production";
 const adminPassword = process.env.ADMIN_PASSWORD || crypto.randomBytes(12).toString("base64url");
 const sessionSecret = process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
@@ -18,6 +22,11 @@ const usingGeneratedPassword = !process.env.ADMIN_PASSWORD;
 const loginFailures = new Map();
 const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const MAX_LOGIN_FAILURES = 8;
+const activity = new ActivityStore(path.join(path.dirname(sessionDir), "activity.json"));
+await activity.initialize();
+const users = new UserStore(path.join(path.dirname(sessionDir), "users.json"));
+await users.initialize(adminPassword);
+const upload = multer({ dest: path.join(os.tmpdir(), "bedrock-panel-uploads"), limits: { fileSize: 1024 * 1024 * 1024 } });
 
 if (isProduction && !process.env.ADMIN_PASSWORD) {
   throw new Error("ADMIN_PASSWORD doit etre defini en production.");
@@ -75,10 +84,12 @@ const fleet = new MultiServerManager({
   backupRoot: process.env.BACKUP_ROOT,
   seedDir: process.env.SEED_DIR,
   downloadUrl: process.env.BDS_DOWNLOAD_URL,
-  autoStart: process.env.AUTO_START !== "false"
+  autoStart: process.env.AUTO_START !== "false",
+  onActivity: (entry) => activity.add(entry)
 });
 
 await fleet.initialize();
+fleet.startBackupScheduler();
 
 const app = express();
 app.set("trust proxy", 1);
@@ -101,6 +112,12 @@ app.use(
   })
 );
 app.use(csrfProtection);
+app.use("/api", (req, res, next) => {
+  if (!["GET", "HEAD", "OPTIONS"].includes(req.method) && req.session?.authenticated && (req.session.user?.role || "admin") !== "admin") {
+    return res.status(403).json({ error: "Action réservée aux administrateurs." });
+  }
+  next();
+});
 
 function requireAuth(req, res, next) {
   if (req.session?.authenticated) return next();
@@ -114,6 +131,18 @@ function asyncRoute(handler) {
 
 function serverFrom(req) {
   return fleet.require(req.params.id).manager;
+}
+
+async function trackedOperation(req, actionName, operationType, task) {
+  const manager = serverFrom(req);
+  try {
+    const result = await manager.runOperation(operationType, (reportProgress) => task(manager, reportProgress));
+    await activity.add({ serverId: req.params.id, user: req.session?.user?.username || "admin", action: actionName, message: "Terminé" });
+    return result;
+  } catch (error) {
+    await activity.add({ serverId: req.params.id, user: req.session?.user?.username || "admin", action: actionName, status: "error", message: error.message });
+    throw error;
+  }
 }
 
 function securityHeaders(_req, res, next) {
@@ -145,20 +174,21 @@ app.get("/login", (req, res) => {
   res.type("html").send(loginHtml());
 });
 
-app.post("/login", (req, res) => {
+app.post("/login", asyncRoute(async (req, res) => {
   if (isLoginLimited(req.ip)) {
     return res.status(429).type("html").send(loginHtml("Trop de tentatives. Reessaie dans quelques minutes."));
   }
-  const password = String(req.body.password || "");
-  const ok = safeCompare(password, adminPassword);
-  if (!ok) {
+  const user = await users.authenticate(req.body.username || "admin", req.body.password, req.body.token);
+  if (!user || user.requiresTotp) {
     recordFailedLogin(req.ip);
-    return res.status(401).type("html").send(loginHtml("Mot de passe incorrect."));
+    const error = user?.requiresTotp ? "Code d'authentification requis ou invalide." : "Identifiants incorrects.";
+    return res.status(401).type("html").send(loginHtml(error));
   }
   clearFailedLogins(req.ip);
   req.session.authenticated = true;
+  req.session.user = user;
   res.redirect("/");
-});
+}));
 
 app.post("/logout", requireAuth, (req, res) => {
   req.session.destroy(() => res.redirect("/login"));
@@ -179,6 +209,7 @@ app.post("/api/servers", requireAuth, asyncRoute(async (req, res) => {
     autoStart: Boolean(req.body.autoStart),
     templateServerId: req.body.templateServerId
   });
+  await activity.add({ serverId: server.id, user: req.session.user?.username || "admin", action: "server.create", message: server.name });
   res.status(201).json({ ok: true, server });
 }));
 
@@ -187,8 +218,10 @@ app.patch("/api/servers/:id", requireAuth, asyncRoute(async (req, res) => {
     name: req.body.name,
     port: req.body.port,
     autoStart: req.body.autoStart,
-    resources: req.body.resources
+    resources: req.body.resources,
+    backupPolicy: req.body.backupPolicy
   });
+  await activity.add({ serverId: req.params.id, user: req.session.user?.username || "admin", action: "server.update", message: server.name });
   res.json({ ok: true, server });
 }));
 
@@ -196,6 +229,7 @@ app.delete("/api/servers/:id", requireAuth, asyncRoute(async (req, res) => {
   const server = fleet.require(req.params.id).meta;
   requireConfirmation(req, server.name);
   await fleet.delete(req.params.id);
+  await activity.add({ serverId: req.params.id, user: req.session.user?.username || "admin", action: "server.delete", message: server.name });
   res.json({ ok: true });
 }));
 
@@ -207,31 +241,85 @@ app.get("/api/servers/:id/logs", requireAuth, (req, res) => {
   res.json({ logs: serverFrom(req).logs(Number(req.query.limit || 300)) });
 });
 
+app.get("/api/servers/:id/events", requireAuth, (req, res) => {
+  const manager = serverFrom(req);
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache, no-transform");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders?.();
+  const send = (event) => res.write(`event: ${event.type === "error" ? "operation-error" : event.type}\ndata: ${JSON.stringify({ ...event.data, at: event.at })}\n\n`);
+  res.write(`event: ready\ndata: ${JSON.stringify({ logs: manager.logs(400), operation: manager.operation })}\n\n`);
+  const unsubscribe = manager.subscribe(send);
+  const heartbeat = setInterval(() => res.write(": heartbeat\n\n"), 15000);
+  req.on("close", () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  });
+});
+
+app.get("/api/servers/:id/commands", requireAuth, (req, res) => {
+  res.json({ commands: serverFrom(req).recentCommands() });
+});
+
 app.post("/api/servers/:id/start", requireAuth, asyncRoute(async (req, res) => {
-  await serverFrom(req).start();
+  await trackedOperation(req, "server.start", "starting", (manager) => manager.start());
   res.json({ ok: true });
 }));
 
 app.post("/api/servers/:id/stop", requireAuth, asyncRoute(async (req, res) => {
-  await serverFrom(req).stop();
+  await trackedOperation(req, "server.stop", "stopping", (manager) => manager.stop());
   res.json({ ok: true });
 }));
 
 app.post("/api/servers/:id/restart", requireAuth, asyncRoute(async (req, res) => {
-  await serverFrom(req).restart();
+  await trackedOperation(req, "server.restart", "restarting", (manager) => manager.restart());
   res.json({ ok: true });
 }));
 
 app.post("/api/servers/:id/reinstall", requireAuth, asyncRoute(async (req, res) => {
   requireConfirmation(req, "REINSTALL");
-  const result = await serverFrom(req).reinstall();
+  const result = await trackedOperation(req, "server.update", "updating", (manager, progress) => manager.reinstall(progress));
   res.json({ ok: true, ...result });
+}));
+
+app.post("/api/servers/:id/install", requireAuth, asyncRoute(async (req, res) => {
+  const status = await trackedOperation(req, "server.install", "installing", async (manager, progress) => {
+    await manager.installBedrock(false, progress);
+    return manager.status();
+  });
+  res.json({ ok: true, status });
+}));
+
+app.get("/api/servers/:id/version", requireAuth, asyncRoute(async (req, res) => {
+  res.json(await serverFrom(req).latestVersionInfo());
+}));
+
+app.post("/api/servers/:id/binary", requireAuth, upload.single("file"), asyncRoute(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Fichier binaire manquant." });
+  try {
+    const manager = serverFrom(req);
+    const expected = process.platform === "win32" ? "bedrock_server.exe" : "bedrock_server";
+    if (path.basename(req.file.originalname).toLowerCase() !== expected.toLowerCase()) {
+      return res.status(400).json({ error: `Le fichier doit s'appeler ${expected}.` });
+    }
+    await trackedOperation(req, "server.binary.upload", "installing", async (_manager, progress) => {
+      progress(20);
+      await fsp.mkdir(manager.serverDir, { recursive: true });
+      await fsp.copyFile(req.file.path, manager.executablePath());
+      await fsp.chmod(manager.executablePath(), 0o755).catch(() => {});
+      progress(100);
+    });
+    res.json({ ok: true, status: await manager.status() });
+  } finally {
+    await fsp.rm(req.file.path, { force: true }).catch(() => {});
+  }
 }));
 
 app.post("/api/servers/:id/command", requireAuth, asyncRoute(async (req, res) => {
   const command = String(req.body.command || "").trim();
   if (!command) return res.status(400).json({ error: "Commande vide" });
   serverFrom(req).sendCommand(command);
+  await activity.add({ serverId: req.params.id, user: req.session.user?.username || "admin", action: "console.command", message: command });
   res.json({ ok: true });
 }));
 
@@ -253,6 +341,7 @@ app.put("/api/servers/:id/properties-form", requireAuth, asyncRoute(async (req, 
   const manager = serverFrom(req);
   const current = await manager.readProperties();
   await manager.writeProperties(mergeProperties(current, normalizePropertyPatch(req.body.values || {})));
+  await activity.add({ serverId: req.params.id, user: req.session.user?.username || "admin", action: "configuration.update", message: "server.properties" });
   res.json({ ok: true });
 }));
 
@@ -266,11 +355,13 @@ app.get("/api/servers/:id/file", requireAuth, asyncRoute(async (req, res) => {
 
 app.put("/api/servers/:id/file", requireAuth, asyncRoute(async (req, res) => {
   await serverFrom(req).writeFile(String(req.body.path || ""), String(req.body.content || ""));
+  await activity.add({ serverId: req.params.id, user: req.session.user?.username || "admin", action: "file.write", message: String(req.body.path || "") });
   res.json({ ok: true });
 }));
 
 app.post("/api/servers/:id/directory", requireAuth, asyncRoute(async (req, res) => {
   await serverFrom(req).makeDirectory(String(req.body.path || ""));
+  await activity.add({ serverId: req.params.id, user: req.session.user?.username || "admin", action: "directory.create", message: String(req.body.path || "") });
   res.json({ ok: true });
 }));
 
@@ -278,6 +369,7 @@ app.delete("/api/servers/:id/file", requireAuth, asyncRoute(async (req, res) => 
   const target = String(req.query.path || "");
   requireConfirmation(req, target);
   await serverFrom(req).deleteFile(target);
+  await activity.add({ serverId: req.params.id, user: req.session.user?.username || "admin", action: "file.delete", message: target });
   res.json({ ok: true });
 }));
 
@@ -286,7 +378,7 @@ app.get("/api/servers/:id/backups", requireAuth, asyncRoute(async (req, res) => 
 }));
 
 app.post("/api/servers/:id/backups", requireAuth, asyncRoute(async (req, res) => {
-  const backup = await serverFrom(req).createBackup();
+  const backup = await trackedOperation(req, "backup.create", "backing-up", (manager) => manager.createBackup("manual"));
   res.json({ ok: true, backup });
 }));
 
@@ -297,13 +389,145 @@ app.get("/api/servers/:id/backups/:name", requireAuth, asyncRoute(async (req, re
 
 app.post("/api/servers/:id/backups/:name/restore", requireAuth, asyncRoute(async (req, res) => {
   requireConfirmation(req, "RESTORE");
-  await serverFrom(req).restoreBackup(req.params.name);
+  await trackedOperation(req, "backup.restore", "restoring", (manager) => manager.restoreBackup(req.params.name));
   res.json({ ok: true });
 }));
 
 app.delete("/api/servers/:id/backups/:name", requireAuth, asyncRoute(async (req, res) => {
   requireConfirmation(req, req.params.name);
-  await serverFrom(req).deleteBackup(req.params.name);
+  await trackedOperation(req, "backup.delete", "deleting-backup", (manager) => manager.deleteBackup(req.params.name));
+  res.json({ ok: true });
+}));
+
+app.get("/api/servers/:id/players", requireAuth, asyncRoute(async (req, res) => {
+  const manager = serverFrom(req);
+  const [players, allowlist, permissions] = await Promise.all([
+    manager.listPlayers(),
+    manager.allowlist(),
+    manager.permissions()
+  ]);
+  res.json({ players, allowlist, permissions });
+}));
+
+app.post("/api/servers/:id/players/:name/kick", requireAuth, asyncRoute(async (req, res) => {
+  serverFrom(req).kickPlayer(req.params.name, req.body.reason);
+  await activity.add({ serverId: req.params.id, user: req.session?.user?.username || "admin", action: "player.kick", message: req.params.name });
+  res.json({ ok: true });
+}));
+
+app.put("/api/servers/:id/allowlist", requireAuth, asyncRoute(async (req, res) => {
+  const allowlist = await serverFrom(req).saveAllowlist(req.body.entries);
+  await activity.add({ serverId: req.params.id, user: req.session?.user?.username || "admin", action: "allowlist.update", message: `${allowlist.length} entrée(s)` });
+  res.json({ ok: true, allowlist });
+}));
+
+app.put("/api/servers/:id/permissions", requireAuth, asyncRoute(async (req, res) => {
+  const permissions = await serverFrom(req).savePermissions(req.body.entries);
+  await activity.add({ serverId: req.params.id, user: req.session?.user?.username || "admin", action: "permissions.update", message: `${permissions.length} entrée(s)` });
+  res.json({ ok: true, permissions });
+}));
+
+app.get("/api/servers/:id/worlds", requireAuth, asyncRoute(async (req, res) => {
+  res.json({ worlds: await serverFrom(req).listWorlds() });
+}));
+
+app.post("/api/servers/:id/worlds/import", requireAuth, upload.single("file"), asyncRoute(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Fichier .mcworld manquant." });
+  try {
+    if (path.extname(req.file.originalname).toLowerCase() !== ".mcworld") return res.status(400).json({ error: "Le fichier doit être au format .mcworld." });
+    const world = await trackedOperation(req, "world.import", "importing-world", (manager) => manager.importWorld(req.file.path, req.file.originalname));
+    res.status(201).json({ ok: true, world });
+  } finally {
+    await fsp.rm(req.file.path, { force: true }).catch(() => {});
+  }
+}));
+
+app.get("/api/servers/:id/worlds/:name/download", requireAuth, asyncRoute(async (req, res) => {
+  const target = path.join(os.tmpdir(), `bedrock-world-${crypto.randomBytes(6).toString("hex")}.mcworld`);
+  await serverFrom(req).exportWorld(req.params.name, target);
+  res.download(target, `${req.params.name}.mcworld`, () => fsp.rm(target, { force: true }).catch(() => {}));
+}));
+
+app.post("/api/servers/:id/worlds/:name/duplicate", requireAuth, asyncRoute(async (req, res) => {
+  const world = await trackedOperation(req, "world.duplicate", "duplicating-world", (manager) => manager.duplicateWorld(req.params.name, req.body.name));
+  res.json({ ok: true, world });
+}));
+
+app.post("/api/servers/:id/worlds/:name/activate", requireAuth, asyncRoute(async (req, res) => {
+  const world = await trackedOperation(req, "world.activate", "activating-world", (manager) => manager.activateWorld(req.params.name));
+  res.json({ ok: true, world });
+}));
+
+app.delete("/api/servers/:id/worlds/:name", requireAuth, asyncRoute(async (req, res) => {
+  requireConfirmation(req, req.params.name);
+  await trackedOperation(req, "world.reset", "resetting-world", (manager) => manager.resetWorld(req.params.name));
+  res.json({ ok: true });
+}));
+
+app.post("/api/servers/:id/worlds/:name/restore", requireAuth, asyncRoute(async (req, res) => {
+  requireConfirmation(req, "RESTORE");
+  await trackedOperation(req, "world.restore", "restoring-world", (manager) => manager.restoreWorldFromBackup(req.body.backup, req.params.name));
+  res.json({ ok: true });
+}));
+
+app.post("/api/servers/:id/files/upload", requireAuth, upload.single("file"), asyncRoute(async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Fichier manquant." });
+  try {
+    const relativePath = [String(req.body.path || ""), path.basename(req.file.originalname)].filter(Boolean).join("/");
+    const file = await serverFrom(req).uploadFile(relativePath, req.file.path, req.body.overwrite === "true");
+    await activity.add({ serverId: req.params.id, user: req.session?.user?.username || "admin", action: "file.upload", message: file.path });
+    res.status(201).json({ ok: true, file });
+  } finally {
+    await fsp.rm(req.file.path, { force: true }).catch(() => {});
+  }
+}));
+
+app.get("/api/servers/:id/file/download", requireAuth, asyncRoute(async (req, res) => {
+  const file = await serverFrom(req).resolveDownload(String(req.query.path || ""));
+  res.download(file);
+}));
+
+app.patch("/api/servers/:id/file", requireAuth, asyncRoute(async (req, res) => {
+  const file = await serverFrom(req).renameFile(req.body.path, req.body.name);
+  await activity.add({ serverId: req.params.id, user: req.session?.user?.username || "admin", action: "file.rename", message: file.path });
+  res.json({ ok: true, file });
+}));
+
+app.get("/api/activity", requireAuth, (req, res) => {
+  res.json({ entries: activity.list(String(req.query.serverId || ""), req.query.limit) });
+});
+
+app.get("/api/me", requireAuth, (req, res) => {
+  res.json({ user: req.session.user || { username: "admin", role: "admin", totpEnabled: false } });
+});
+
+app.get("/api/users", requireAuth, (req, res) => {
+  res.json({ users: users.list() });
+});
+
+app.post("/api/users", requireAuth, asyncRoute(async (req, res) => {
+  const user = await users.create(req.body);
+  await activity.add({ user: req.session.user?.username || "admin", action: "user.create", message: user.username });
+  res.status(201).json({ ok: true, user });
+}));
+
+app.delete("/api/users/:username", requireAuth, asyncRoute(async (req, res) => {
+  await users.remove(req.params.username, req.session.user?.username || "admin");
+  await activity.add({ user: req.session.user?.username || "admin", action: "user.delete", message: req.params.username });
+  res.json({ ok: true });
+}));
+
+app.post("/api/users/:username/totp/setup", requireAuth, asyncRoute(async (req, res) => {
+  res.json(await users.beginTotp(req.params.username));
+}));
+
+app.post("/api/users/:username/totp/enable", requireAuth, asyncRoute(async (req, res) => {
+  await users.enableTotp(req.params.username, req.body.token);
+  res.json({ ok: true });
+}));
+
+app.delete("/api/users/:username/totp", requireAuth, asyncRoute(async (req, res) => {
+  await users.disableTotp(req.params.username);
   res.json({ ok: true });
 }));
 
@@ -335,6 +559,7 @@ function loginHtml(error = "") {
     * { box-sizing:border-box; }
     body { margin:0; min-height:100vh; display:grid; place-items:center; background:radial-gradient(circle at 80% 0%, rgba(91,140,255,.2), transparent 32%), var(--bg); color:var(--ink); font-family:Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
     main { width:min(430px, calc(100vw - 32px)); background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:30px; box-shadow:0 18px 50px rgba(0,0,0,.28); }
+    form { display:grid; gap:10px; }
     h1 { margin:0 0 20px; font-size:30px; font-weight:900; letter-spacing:0; }
     h1::first-letter { color:var(--blue); }
     label { display:block; margin:0 0 8px; font-size:12px; font-weight:900; text-transform:uppercase; color:#a8afc9; }
@@ -348,8 +573,12 @@ function loginHtml(error = "") {
   <main>
     <h1>Bedrock Host Panel</h1>
     <form method="post" action="/login">
+      <label for="username">Utilisateur</label>
+      <input id="username" name="username" value="admin" autocomplete="username" required>
       <label for="password">Mot de passe</label>
-      <input id="password" name="password" type="password" autocomplete="current-password" autofocus required>
+      <input id="password" name="password" type="password" autocomplete="current-password" required>
+      <label for="token">Code 2FA <span style="text-transform:none;font-weight:600">(si activé)</span></label>
+      <input id="token" name="token" inputmode="numeric" pattern="[0-9]{6}" autocomplete="one-time-code">
       <button type="submit">Connexion</button>
       <p>${escapeHtml(error)}</p>
     </form>
@@ -492,8 +721,29 @@ function panelHtml(csrfToken = "") {
     .empty-state { min-height:220px; display:grid; place-items:center; text-align:center; color:var(--muted); border:1px dashed #424a60; border-radius:8px; padding:28px; }
     .empty-state > div { display:grid; justify-items:center; gap:10px; }
     .empty-state svg { width:30px; height:30px; }
+    .hidden { display:none !important; }
+    .progress { height:8px; overflow:hidden; border-radius:4px; background:#171b25; }
+    .progress > span { display:block; height:100%; width:0; background:var(--blue); transition:width .2s ease; }
+    .install-panel { display:grid; gap:12px; padding:14px; border:1px solid #46506d; border-radius:8px; background:#202633; }
+    .install-panel.ready { border-color:#397e57; }
+    .install-panel.error { border-color:#7a3b43; }
+    .toolbar { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+    .toolbar input[type="search"] { flex:1 1 220px; }
+    .data-list { display:grid; gap:8px; }
+    .data-row { min-height:54px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 12px; border:1px solid #3a4260; border-radius:8px; background:#242b42; }
+    .data-row-main { min-width:0; display:grid; gap:4px; }
+    .data-row-main strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .badge { display:inline-flex; align-items:center; width:max-content; padding:4px 7px; border-radius:5px; background:#343c58; color:#cbd3eb; font-size:11px; font-weight:900; text-transform:uppercase; }
+    .badge.ok { background:#203d31; color:#9ff0bd; }
+    .badge.error { background:#442a35; color:#ffb4b7; }
+    .two-columns { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:18px; align-items:start; }
+    .stack { display:grid; gap:12px; }
+    .console-tools { display:flex; gap:8px; padding:12px 16px; background:#181d29; border-bottom:1px solid #343b50; }
+    .console-tools input { flex:1; }
+    .activity-list { display:grid; gap:0; }
+    .activity-row { display:grid; grid-template-columns:160px 180px 100px minmax(0, 1fr); gap:12px; padding:11px 0; border-bottom:1px solid rgba(255,255,255,.06); align-items:center; }
     @media (max-width: 1120px) { .shell { grid-template-columns:1fr; } .sidebar { position:relative; min-height:auto; max-height:none; } .dashboard, .tab-panel.split.active, .overview-board, .file-layout { grid-template-columns:1fr; } .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-    @media (max-width: 620px) { .main { padding:14px; } .overview-hero, .hero { display:grid; align-items:start; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; overflow:auto; } .tab-list { flex-wrap:nowrap; } .grid, .left-column .grid, .fields, .server-stats, .form-grid { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .left-column .metric:nth-child(5) { grid-column:auto; } .actions button, .actions a.button { flex:1 1 auto; } .modal-footer { display:grid; grid-template-columns:1fr 1fr; } }
+    @media (max-width: 620px) { .sidebar { min-height:auto; max-height:none; padding:12px 14px; display:flex; align-items:center; gap:12px; } .brand { font-size:19px; } .brand-mark { width:32px; height:32px; } .sidebar .plan-card, .side-group h3 { display:none; } .side-group { margin-left:auto; } .nav-item { min-height:38px; padding:0 9px; } .main { padding:14px; } .overview-hero, .hero { display:grid; align-items:start; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; overflow:auto; } .tab-list { flex-wrap:nowrap; } .grid, .left-column .grid, .fields, .server-stats, .form-grid, .two-columns { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .left-column .metric:nth-child(5) { grid-column:auto; } .actions button, .actions a.button { flex:1 1 auto; } .modal-footer { display:grid; grid-template-columns:1fr 1fr; } .activity-row { grid-template-columns:1fr; gap:4px; } }
   </style>
 </head>
 <body>
@@ -565,9 +815,12 @@ function panelHtml(csrfToken = "") {
             <button class="tab" data-tab="config">Configuration</button>
             <button class="tab" data-tab="backups">Sauvegardes</button>
             <button class="tab" data-tab="files">Fichiers</button>
+            <button class="tab" data-tab="players">Joueurs</button>
+            <button class="tab" data-tab="worlds">Mondes</button>
+            <button class="tab" data-tab="activity">Activité</button>
+            <button class="tab" data-tab="accounts" id="accountsTab">Comptes</button>
           </div>
           <div class="actions">
-            <button class="blue" id="reinstallBtn"><i data-lucide="download"></i>Réinstaller</button>
             <button class="icon" id="refreshDetail" title="Actualiser"><i data-lucide="refresh-cw"></i></button>
           </div>
         </div>
@@ -585,11 +838,27 @@ function panelHtml(csrfToken = "") {
             </div>
             <div class="content">
               <div class="grid">
-                <div class="metric"><span>Port</span><strong id="gamePort">...</strong></div>
-                <div class="metric"><span>Adresse</span><strong id="serverAddress">...</strong></div>
-                <div class="metric"><span>Monde</span><strong id="worldName">...</strong></div>
-                <div class="metric"><span>Sauvegardes</span><strong id="backupCount">...</strong></div>
-                <div class="metric"><span>Dossier</span><strong id="serverDir">...</strong></div>
+                <div class="metric"><span>Installation</span><strong id="installationState">...</strong></div>
+                <div class="metric"><span>Version</span><strong id="serverVersion">...</strong></div>
+                <div class="metric"><span>Uptime</span><strong id="serverUptime">...</strong></div>
+                <div class="metric"><span>Joueurs</span><strong id="playerCount">...</strong></div>
+                <div class="metric"><span>Stockage utilisé</span><strong id="diskUsage">...</strong></div>
+                <div class="metric"><span>Dernière sauvegarde</span><strong id="lastBackup">...</strong></div>
+                <div class="metric"><span>Adresse locale</span><strong id="serverAddress">...</strong><button class="icon" id="copyAddress" title="Copier l’adresse"><i data-lucide="copy"></i></button></div>
+                <div class="metric"><span>Adresse publique</span><strong id="publicAddress">...</strong></div>
+                <div class="metric"><span>État réseau UDP</span><strong id="networkState">...</strong></div>
+                <div class="metric"><span>Dernière erreur</span><strong id="lastServerError">...</strong></div>
+              </div>
+              <div class="install-panel" id="installPanel" style="margin-top:16px">
+                <div class="row"><div><strong id="installTitle">État de l’installation</strong><div class="muted" id="installMessage"></div></div><span class="badge" id="installBadge">...</span></div>
+                <div class="progress"><span id="operationProgress"></span></div>
+                <div class="actions">
+                  <button class="blue" id="installServer"><i data-lucide="download"></i>Installer</button>
+                  <button id="checkVersion"><i data-lucide="search"></i>Vérifier la version</button>
+                  <button class="amber" id="updateServer"><i data-lucide="refresh-cw"></i>Mettre à jour</button>
+                  <button id="chooseBinary" type="button"><i data-lucide="upload"></i>Importer le binaire</button>
+                  <input class="hidden" id="binaryUpload" type="file">
+                </div>
               </div>
               <div class="fields" style="margin-top:16px">
                 <div>
@@ -614,10 +883,15 @@ function panelHtml(csrfToken = "") {
               <h2>Console</h2>
               <button class="icon" id="refreshLogs" title="Actualiser"><i data-lucide="refresh-cw"></i></button>
             </div>
+            <div class="console-tools">
+              <input id="logSearch" type="search" placeholder="Rechercher dans les logs">
+              <select id="logFilter" aria-label="Filtrer les logs"><option value="all">Tout</option><option value="errors">Erreurs</option><option value="commands">Commandes</option></select>
+            </div>
             <pre id="logs"></pre>
             <div class="content">
               <div class="actions">
-                <input class="command" id="commandInput" placeholder="Entrer une commande...">
+                <input class="command" id="commandInput" list="commandHistory" placeholder="Entrer une commande...">
+                <datalist id="commandHistory"></datalist>
                 <button class="blue" id="sendCommand"><i data-lucide="send"></i>Envoyer</button>
               </div>
             </div>
@@ -656,6 +930,14 @@ function panelHtml(csrfToken = "") {
             <button class="primary" id="createBackup"><i data-lucide="archive"></i>Créer</button>
           </div>
           <div class="content">
+            <div class="install-panel" style="margin-bottom:16px">
+              <div class="row"><strong>Sauvegardes automatiques</strong><button id="saveBackupPolicy"><i data-lucide="save"></i>Enregistrer</button></div>
+              <div class="form-grid">
+                <div><label for="backupEnabled">Planification</label><select id="backupEnabled"><option value="false">Désactivée</option><option value="true">Activée</option></select></div>
+                <div><label for="backupInterval">Fréquence</label><select id="backupInterval"><option value="60">Chaque heure</option><option value="360">Toutes les 6 heures</option><option value="720">Toutes les 12 heures</option><option value="1440">Chaque jour</option><option value="10080">Chaque semaine</option></select></div>
+                <div><label for="backupRetention">Nombre conservé</label><input id="backupRetention" type="number" min="1" max="100" value="10"></div>
+              </div>
+            </div>
             <ul class="backup-list" id="backupList"></ul>
           </div>
         </section>
@@ -675,7 +957,14 @@ function panelHtml(csrfToken = "") {
               <button id="goUpFile"><i data-lucide="corner-up-left"></i>Parent</button>
               <button id="newDirectory"><i data-lucide="folder-plus"></i>Dossier</button>
               <button id="newFile"><i data-lucide="file-plus"></i>Fichier</button>
-              <span class="pill" id="currentFilePath">/</span>
+              <button id="chooseFileUpload"><i data-lucide="upload"></i>Importer</button>
+              <input class="hidden" id="fileUpload" type="file">
+              <div class="toolbar" id="fileBreadcrumbs"></div>
+            </div>
+            <div class="toolbar" style="margin-bottom:12px">
+              <input id="fileSearch" type="search" placeholder="Rechercher dans ce dossier">
+              <button id="renameFile"><i data-lucide="pencil"></i>Renommer</button>
+              <button id="downloadFile"><i data-lucide="download"></i>Télécharger</button>
             </div>
             <div class="file-layout">
               <div class="file-list" id="fileList"></div>
@@ -684,6 +973,61 @@ function panelHtml(csrfToken = "") {
                 <input id="fileEditorPath" readonly>
                 <textarea id="fileEditor" placeholder="Sélectionne un fichier texte"></textarea>
               </div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="tab-panel" data-panel="players">
+        <div class="two-columns">
+          <section>
+            <div class="head"><h2>Joueurs connectés</h2><button class="icon" id="refreshPlayers" title="Actualiser"><i data-lucide="refresh-cw"></i></button></div>
+            <div class="content"><div class="data-list" id="playerList"></div></div>
+          </section>
+          <div class="stack">
+            <section>
+              <div class="head"><h2>Liste blanche</h2></div>
+              <div class="content stack">
+                <div class="toolbar"><input id="allowlistName" placeholder="Pseudo du joueur"><button id="addAllowlist"><i data-lucide="plus"></i>Ajouter</button></div>
+                <div class="data-list" id="allowlistList"></div>
+              </div>
+            </section>
+            <section>
+              <div class="head"><h2>Permissions</h2></div>
+              <div class="content stack">
+                <div class="toolbar"><input id="permissionXuid" placeholder="XUID"><select id="permissionRole"><option value="visitor">Visiteur</option><option value="member">Membre</option><option value="operator">Opérateur</option></select><button id="addPermission"><i data-lucide="plus"></i>Ajouter</button></div>
+                <div class="data-list" id="permissionList"></div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+      <div class="tab-panel" data-panel="worlds">
+        <section>
+          <div class="head"><h2>Mondes</h2><div class="actions"><button id="chooseWorldImport"><i data-lucide="upload"></i>Importer .mcworld</button><input class="hidden" id="worldImport" type="file" accept=".mcworld"></div></div>
+          <div class="content"><div class="data-list" id="worldList"></div></div>
+        </section>
+      </div>
+
+      <div class="tab-panel" data-panel="activity">
+        <section>
+          <div class="head"><h2>Historique d’activité</h2><button class="icon" id="refreshActivity" title="Actualiser"><i data-lucide="refresh-cw"></i></button></div>
+          <div class="content"><div class="activity-list" id="activityList"></div></div>
+        </section>
+      </div>
+
+      <div class="tab-panel" data-panel="accounts">
+        <section>
+          <div class="head"><h2>Comptes administrateurs</h2></div>
+          <div class="content two-columns">
+            <div class="stack"><div class="data-list" id="userList"></div></div>
+            <div class="install-panel">
+              <strong>Nouveau compte</strong>
+              <div><label for="newUsername">Utilisateur</label><input id="newUsername"></div>
+              <div><label for="newUserPassword">Mot de passe</label><input id="newUserPassword" type="password"></div>
+              <div><label for="newUserRole">Rôle</label><select id="newUserRole"><option value="viewer">Lecture seule</option><option value="admin">Administrateur</option></select></div>
+              <button class="primary" id="createUser"><i data-lucide="user-plus"></i>Créer le compte</button>
             </div>
           </div>
         </section>
@@ -763,14 +1107,19 @@ let servers = [];
 let activeId = localStorage.getItem("bedrockActiveServer") || "";
 let viewMode = "overview";
 let detailTab = "overview";
-let busy = false;
 let loadedPropertiesFor = "";
 let currentFilePath = "";
 let selectedFilePath = "";
+let currentFiles = [];
+let rawLogs = [];
+let eventSource = null;
+let playerState = { players: [], allowlist: [], permissions: [] };
+let currentUser = { username: "admin", role: "admin" };
 
 async function api(path, options = {}) {
   const method = String(options.method || "GET").toUpperCase();
-  const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+  const isFormData = options.body instanceof FormData;
+  const headers = { ...(isFormData ? {} : { "Content-Type": "application/json" }), ...(options.headers || {}) };
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) headers["x-csrf-token"] = CSRF_TOKEN;
   let res;
   try {
@@ -815,11 +1164,19 @@ function setConnectionState(connected) {
   status.querySelector("span:last-child").textContent = connected ? "Panel connecté" : "Panel hors ligne";
 }
 
-function setBusy(value) {
-  busy = value;
+async function loadCurrentUser() {
+  const data = await api("/api/me");
+  currentUser = data.user;
+  $("accountsTab").classList.toggle("hidden", currentUser.role !== "admin");
+  applyRole();
+}
+
+function applyRole() {
+  if (currentUser.role !== "viewer") return;
+  const allowed = new Set(["refreshServers", "refreshDetail", "backOverview", "refreshLogs", "refreshPlayers", "refreshActivity", "copyAddress", "checkVersion", "goUpFile", "downloadFile"]);
   document.querySelectorAll("button").forEach((button) => {
-    if (button.closest("form")) return;
-    button.disabled = value;
+    if (button.dataset.tab !== undefined || button.dataset.server !== undefined || button.dataset.breadcrumb !== undefined || allowed.has(button.id) || button.closest('form[action="/logout"]')) return;
+    button.disabled = true;
   });
 }
 
@@ -914,6 +1271,10 @@ function setDetailTab(tab) {
   if (tab === "backups") refreshBackups().catch((error) => toast(error.message));
   if (tab === "config") loadProperties().catch((error) => toast(error.message));
   if (tab === "files") loadFiles(currentFilePath).catch((error) => toast(error.message));
+  if (tab === "players") loadPlayers().catch((error) => toast(error.message, "error"));
+  if (tab === "worlds") loadWorlds().catch((error) => toast(error.message, "error"));
+  if (tab === "activity") loadActivity().catch((error) => toast(error.message, "error"));
+  if (tab === "accounts") loadUsers().catch((error) => toast(error.message, "error"));
 }
 
 function openServer(id) {
@@ -925,13 +1286,70 @@ function openServer(id) {
   renderView();
   renderServerGallery();
   renderActive();
+  connectEvents();
   refreshActive().catch((error) => toast(error.message));
 }
 
 function showOverview() {
+  disconnectEvents();
   viewMode = "overview";
   renderView();
   refreshServers().catch((error) => toast(error.message));
+}
+
+function connectEvents() {
+  disconnectEvents();
+  if (!activeId) return;
+  eventSource = new EventSource(endpoint("/events"));
+  eventSource.addEventListener("ready", (event) => {
+    const data = JSON.parse(event.data);
+    rawLogs = data.logs || [];
+    renderLogs();
+    updateOperation(data.operation || { type:"idle", progress:0 });
+  });
+  eventSource.addEventListener("logs", (event) => {
+    const data = JSON.parse(event.data);
+    rawLogs.push(...(data.lines || []));
+    if (rawLogs.length > 1200) rawLogs.splice(0, rawLogs.length - 1200);
+    renderLogs();
+  });
+  eventSource.addEventListener("operation", (event) => {
+    const data = JSON.parse(event.data);
+    updateOperation(data.operation || { type:"idle", progress:0 });
+    if (data.operation?.type === "idle") refreshActive().catch(() => {});
+  });
+  eventSource.addEventListener("operation-error", (event) => {
+    if (event.data) toast(JSON.parse(event.data).message || "Erreur serveur", "error");
+  });
+  eventSource.onerror = () => setConnectionState(false);
+  eventSource.onopen = () => setConnectionState(true);
+}
+
+function disconnectEvents() {
+  eventSource?.close();
+  eventSource = null;
+}
+
+function updateOperation(operation) {
+  const server = activeServer();
+  if (server) server.status = { ...(server.status || {}), operation };
+  const progress = Number(operation.progress || 0);
+  $("operationProgress").style.width = progress + "%";
+  renderOperationControls(operation);
+}
+
+function renderLogs() {
+  const search = $("logSearch").value.trim().toLowerCase();
+  const filter = $("logFilter").value;
+  const lines = rawLogs.filter((line) => {
+    const value = String(line);
+    if (search && !value.toLowerCase().includes(search)) return false;
+    if (filter === "errors" && !/error|exception|fail|warn/i.test(value)) return false;
+    if (filter === "commands" && !/^\[commande\]/i.test(value)) return false;
+    return true;
+  });
+  $("logs").textContent = lines.join("");
+  $("logs").scrollTop = $("logs").scrollHeight;
 }
 
 function renderCreateDefaults() {
@@ -956,15 +1374,11 @@ function renderActive() {
     $("serverAutoStart").checked = false;
     $("statePill").className = "pill off";
     $("statePill").querySelector("span").textContent = "Aucun";
-    $("gamePort").textContent = "-";
-    $("worldName").textContent = "-";
-    $("backupCount").textContent = "-";
-    $("serverDir").textContent = "-";
+    ["installationState", "serverVersion", "serverUptime", "playerCount", "diskUsage", "lastBackup", "serverAddress", "publicAddress", "networkState", "lastServerError"].forEach((id) => { $(id).textContent = "-"; });
     $("logs").textContent = "";
     clearPropertyForm();
     $("backupList").innerHTML = '<li><span class="muted">Aucun serveur sélectionné.</span></li>';
-    $("serverAddress").textContent = "-";
-  ["startBtn", "restartBtn", "stopBtn", "reinstallBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile"].forEach((id) => {
+  ["startBtn", "restartBtn", "stopBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile", "installServer", "updateServer"].forEach((id) => {
     $(id).disabled = true;
   });
     lucide.createIcons();
@@ -976,7 +1390,7 @@ function renderActive() {
   $("serverName").value = server.name;
   $("serverPort").value = status.gamePort || "";
   $("serverAutoStart").checked = Boolean(server.autoStart);
-  ["startBtn", "restartBtn", "stopBtn", "reinstallBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile"].forEach((id) => {
+  ["startBtn", "restartBtn", "stopBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile", "installServer", "updateServer"].forEach((id) => {
     $(id).disabled = false;
   });
   $("startBtn").disabled = Boolean(status.running);
@@ -985,12 +1399,75 @@ function renderActive() {
   });
   $("statePill").className = "pill " + (status.running ? "ok" : "off");
   $("statePill").querySelector("span").textContent = status.error ? "Erreur" : (status.running ? "En ligne" : "Arrêté");
-  $("gamePort").textContent = status.gamePort || "-";
-  $("serverAddress").textContent = serverAddress(status);
-  $("worldName").textContent = status.worldName || "-";
-  $("backupCount").textContent = status.backupCount ?? "-";
-  $("serverDir").textContent = status.serverDir || server.serverDir || "-";
+  const installationLabels = { "not-installed":"Non installé", installing:"Installation", ready:"Prêt", error:"Erreur" };
+  $("installationState").textContent = installationLabels[status.installationState] || "Inconnu";
+  $("serverVersion").textContent = status.version || "Inconnue";
+  $("serverUptime").textContent = formatDuration(status.uptimeSeconds || 0);
+  $("playerCount").textContent = server.playerCount ?? "-";
+  $("diskUsage").textContent = status.diskUsageLabel || "-";
+  $("lastBackup").textContent = status.lastBackup ? formatDate(status.lastBackup.createdAt) : "Aucune";
+  $("serverAddress").textContent = status.network?.localAddress || serverAddress(status);
+  $("publicAddress").textContent = status.network?.publicAddress || "Non configurée";
+  const networkLabels = { "expected-open":"En écoute", closed:"Fermé", "in-use":"Port utilisé" };
+  $("networkState").textContent = networkLabels[status.network?.udpState] || "Inconnu";
+  $("lastServerError").textContent = status.lastError || status.error || "Aucune";
+  $("backupEnabled").value = String(Boolean(server.backupPolicy?.enabled));
+  $("backupInterval").value = String(server.backupPolicy?.intervalMinutes || 360);
+  $("backupRetention").value = server.backupPolicy?.retention || 10;
+  renderInstallation(status);
+  renderOperationControls(status.operation || { type:"idle", progress:0 });
   lucide.createIcons();
+  applyRole();
+}
+
+function renderInstallation(status) {
+  const state = status.installationState || "not-installed";
+  const panel = $("installPanel");
+  panel.className = "install-panel " + (state === "ready" ? "ready" : (state === "error" ? "error" : ""));
+  const labels = { "not-installed":"Non installé", installing:"Installation en cours", ready:"Serveur prêt", error:"Installation en erreur" };
+  $("installTitle").textContent = labels[state] || "État inconnu";
+  $("installBadge").textContent = state === "ready" ? "Prêt" : (state === "installing" ? "En cours" : "Action requise");
+  $("installBadge").className = "badge " + (state === "ready" ? "ok" : (state === "error" ? "error" : ""));
+  const network = status.network || {};
+  const address = network.publicAddress || network.localAddress || "Adresse indisponible";
+  $("installMessage").textContent = state === "not-installed"
+    ? "Installe automatiquement Bedrock sous Linux ou importe le binaire attendu sur Windows."
+    : (state === "error" ? (status.lastError || "Consulte la console pour le détail.") : "Version " + (status.version || "inconnue") + " · " + address + (network.warning ? " · " + network.warning : ""));
+  $("installServer").disabled = Boolean(status.installed) || state === "installing";
+  $("updateServer").disabled = !status.installed || state === "installing";
+}
+
+function renderOperationControls(operation) {
+  const type = operation?.type || "idle";
+  const active = type !== "idle";
+  const labels = {
+    starting:"Démarrage en cours", stopping:"Arrêt en cours", restarting:"Redémarrage en cours",
+    "backing-up":"Sauvegarde en cours", restoring:"Restauration en cours", installing:"Installation en cours",
+    updating:"Mise à jour en cours", "importing-world":"Import du monde", "duplicating-world":"Duplication du monde",
+    "resetting-world":"Réinitialisation du monde", "restoring-world":"Restauration du monde", "activating-world":"Activation du monde"
+  };
+  if (active) {
+    $("statePill").className = "pill";
+    $("statePill").querySelector("span").textContent = labels[type] || "Opération en cours";
+  }
+  $("operationProgress").style.width = (active ? Number(operation.progress || 4) : 0) + "%";
+  const lifecycle = ["startBtn", "restartBtn", "stopBtn", "installServer", "updateServer"];
+  if (active) lifecycle.forEach((id) => { $(id).disabled = true; });
+  if (active && ["backing-up", "restoring", "updating", "installing"].includes(type)) $("createBackup").disabled = true;
+}
+
+function formatDuration(seconds) {
+  const value = Math.max(0, Number(seconds) || 0);
+  if (!value) return "Arrêté";
+  const days = Math.floor(value / 86400);
+  const hours = Math.floor((value % 86400) / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  return [days && days + "j", hours && hours + "h", minutes + "min"].filter(Boolean).join(" ");
+}
+
+function formatDate(value) {
+  if (!value) return "-";
+  return new Intl.DateTimeFormat("fr-FR", { dateStyle:"short", timeStyle:"short" }).format(new Date(value));
 }
 
 async function refreshActive() {
@@ -1012,17 +1489,19 @@ async function refreshActive() {
 }
 
 async function refreshLogs() {
-  const data = await api(endpoint("/logs?limit=320"));
-  $("logs").textContent = data.logs.join("");
-  $("logs").scrollTop = $("logs").scrollHeight;
+  const [data, history] = await Promise.all([api(endpoint("/logs?limit=400")), api(endpoint("/commands"))]);
+  rawLogs = data.logs || [];
+  $("commandHistory").innerHTML = (history.commands || []).map((entry) => '<option value="' + escapeHtmlClient(entry.command) + '"></option>').join("");
+  renderLogs();
 }
 
 async function refreshBackups() {
   const data = await api(endpoint("/backups"));
   $("backupList").innerHTML = data.backups.map((backup) => {
     const encoded = encodeURIComponent(backup.name);
+    const origins = { manual:"Manuelle", automatic:"Automatique", update:"Avant mise à jour", legacy:"Ancienne" };
     return '<li>' +
-      '<div class="row"><strong>' + escapeHtmlClient(backup.name) + '</strong><span class="muted">' + escapeHtmlClient(backup.sizeLabel) + '</span></div>' +
+      '<div class="row"><div><strong>' + escapeHtmlClient(backup.name) + '</strong><div class="muted">' + formatDate(backup.createdAt) + ' · ' + escapeHtmlClient(origins[backup.origin] || backup.origin) + '</div></div><span class="muted">' + escapeHtmlClient(backup.sizeLabel) + '</span></div>' +
       '<div class="actions">' +
         '<a class="button" href="' + endpoint("/backups/") + encoded + '"><i data-lucide="download"></i>Zip</a>' +
         '<button data-restore="' + encoded + '"><i data-lucide="history"></i>Restaurer</button>' +
@@ -1092,9 +1571,115 @@ function serverAddress(status) {
 
 async function loadFiles(path = "") {
   currentFilePath = path || "";
-  $("currentFilePath").textContent = "/" + currentFilePath;
   const data = await api(endpoint("/files?path=") + encodeURIComponent(currentFilePath));
-  $("fileList").innerHTML = data.files.map((file) => {
+  currentFiles = data.files || [];
+  renderBreadcrumbs();
+  renderFiles();
+}
+
+async function loadPlayers() {
+  playerState = await api(endpoint("/players"));
+  const server = activeServer();
+  if (server) server.playerCount = playerState.players.length;
+  $("playerCount").textContent = playerState.players.length;
+  $("playerList").innerHTML = playerState.players.map((name) => '<div class="data-row"><div class="data-row-main"><strong>' + escapeHtmlClient(name) + '</strong><span class="badge ok">En ligne</span></div><button class="red" data-kick-player="' + escapeHtmlClient(name) + '"><i data-lucide="log-out"></i>Expulser</button></div>').join("") || '<div class="muted">Aucun joueur connecté.</div>';
+  $("allowlistList").innerHTML = playerState.allowlist.map((entry, index) => '<div class="data-row"><strong>' + escapeHtmlClient(entry.name) + '</strong><button class="danger-icon" data-remove-allow="' + index + '" title="Retirer"><i data-lucide="trash-2"></i></button></div>').join("") || '<div class="muted">Liste vide.</div>';
+  $("permissionList").innerHTML = playerState.permissions.map((entry, index) => '<div class="data-row"><div class="data-row-main"><strong>' + escapeHtmlClient(entry.xuid) + '</strong><span class="badge">' + escapeHtmlClient(entry.permission) + '</span></div><button class="danger-icon" data-remove-permission="' + index + '" title="Retirer"><i data-lucide="trash-2"></i></button></div>').join("") || '<div class="muted">Aucune permission personnalisée.</div>';
+  document.querySelectorAll("[data-kick-player]").forEach((button) => { button.onclick = () => action("Joueur expulsé.", () => api(endpoint("/players/") + encodeURIComponent(button.dataset.kickPlayer) + "/kick", { method:"POST", body:"{}" })); });
+  document.querySelectorAll("[data-remove-allow]").forEach((button) => { button.onclick = () => saveAllowlist(playerState.allowlist.filter((_entry, index) => index !== Number(button.dataset.removeAllow))); });
+  document.querySelectorAll("[data-remove-permission]").forEach((button) => { button.onclick = () => savePermissions(playerState.permissions.filter((_entry, index) => index !== Number(button.dataset.removePermission))); });
+  lucide.createIcons();
+  applyRole();
+}
+
+async function saveAllowlist(entries) {
+  const data = await api(endpoint("/allowlist"), { method:"PUT", body:JSON.stringify({ entries }) });
+  playerState.allowlist = data.allowlist;
+  await loadPlayers();
+}
+
+async function savePermissions(entries) {
+  const data = await api(endpoint("/permissions"), { method:"PUT", body:JSON.stringify({ entries }) });
+  playerState.permissions = data.permissions;
+  await loadPlayers();
+}
+
+async function loadWorlds() {
+  const data = await api(endpoint("/worlds"));
+  $("worldList").innerHTML = data.worlds.map((world) => {
+    const encoded = encodeURIComponent(world.name);
+    return '<div class="data-row"><div class="data-row-main"><strong>' + escapeHtmlClient(world.name) + '</strong><span class="muted">' + escapeHtmlClient(world.sizeLabel) + ' · ' + formatDate(world.modifiedAt) + '</span>' + (world.active ? '<span class="badge ok">Actif</span>' : '') + '</div><div class="actions">' + (world.active ? '' : '<button data-activate-world="' + encoded + '"><i data-lucide="check"></i>Activer</button>') + '<a class="button" href="' + endpoint("/worlds/") + encoded + '/download"><i data-lucide="download"></i>Télécharger</a><button data-duplicate-world="' + encoded + '"><i data-lucide="copy"></i>Dupliquer</button><button data-restore-world="' + encoded + '"><i data-lucide="history"></i>Restaurer</button><button class="danger-icon" data-reset-world="' + encoded + '" title="Réinitialiser"><i data-lucide="trash-2"></i></button></div></div>';
+  }).join("") || '<div class="muted">Aucun monde trouvé.</div>';
+  document.querySelectorAll("[data-duplicate-world]").forEach((button) => { button.onclick = () => duplicateWorld(decodeURIComponent(button.dataset.duplicateWorld)); });
+  document.querySelectorAll("[data-activate-world]").forEach((button) => { button.onclick = () => action("Monde activé.", () => api(endpoint("/worlds/") + button.dataset.activateWorld + "/activate", { method:"POST", body:"{}" })).then(loadWorlds); });
+  document.querySelectorAll("[data-reset-world]").forEach((button) => { button.onclick = () => resetWorld(decodeURIComponent(button.dataset.resetWorld)); });
+  document.querySelectorAll("[data-restore-world]").forEach((button) => { button.onclick = () => restoreWorld(decodeURIComponent(button.dataset.restoreWorld)); });
+  lucide.createIcons();
+  applyRole();
+}
+
+async function duplicateWorld(name) {
+  const newName = await requestTextInput("Dupliquer le monde", "Nom de la copie");
+  if (!newName) return;
+  await action("Monde dupliqué.", () => api(endpoint("/worlds/") + encodeURIComponent(name) + "/duplicate", { method:"POST", body:JSON.stringify({ name:newName }) }));
+  await loadWorlds();
+}
+
+async function resetWorld(name) {
+  if (!await requireTypedConfirmation("Le monde sera supprimé et régénéré au prochain démarrage.", name, "Réinitialiser le monde")) return;
+  await action("Monde réinitialisé.", () => api(endpoint("/worlds/") + encodeURIComponent(name), { method:"DELETE", body:JSON.stringify({ confirm:name }) }));
+  await loadWorlds();
+}
+
+async function restoreWorld(name) {
+  const data = await api(endpoint("/backups"));
+  const backup = await requestTextInput("Restaurer le monde", "Nom exact de la sauvegarde ZIP");
+  if (!backup || !data.backups.some((item) => item.name === backup)) return toast("Sauvegarde introuvable.", "error");
+  if (!await requireTypedConfirmation("Le monde actuel sera remplacé depuis la sauvegarde.", "RESTORE", "Restaurer le monde")) return;
+  await action("Monde restauré.", () => api(endpoint("/worlds/") + encodeURIComponent(name) + "/restore", { method:"POST", body:JSON.stringify({ backup, confirm:"RESTORE" }) }));
+}
+
+async function loadActivity() {
+  const data = await api("/api/activity?serverId=" + encodeURIComponent(activeId));
+  $("activityList").innerHTML = data.entries.map((entry) => '<div class="activity-row"><span class="muted">' + formatDate(entry.createdAt) + '</span><strong>' + escapeHtmlClient(entry.action) + '</strong><span class="badge ' + (entry.status === "error" ? "error" : "ok") + '">' + escapeHtmlClient(entry.status) + '</span><span>' + escapeHtmlClient(entry.message || "-") + '</span></div>').join("") || '<div class="muted">Aucune activité enregistrée.</div>';
+}
+
+async function loadUsers() {
+  const data = await api("/api/users");
+  $("userList").innerHTML = data.users.map((user) => '<div class="data-row"><div class="data-row-main"><strong>' + escapeHtmlClient(user.username) + '</strong><span class="muted">' + (user.role === "admin" ? "Administrateur" : "Lecture seule") + ' · 2FA ' + (user.totpEnabled ? "activée" : "désactivée") + '</span></div><div class="actions">' + (user.totpEnabled ? '<button data-disable-totp="' + escapeHtmlClient(user.username) + '"><i data-lucide="shield-off"></i>Désactiver 2FA</button>' : '<button data-user-totp="' + escapeHtmlClient(user.username) + '"><i data-lucide="shield-check"></i>Activer 2FA</button>') + (user.username === currentUser.username ? '' : '<button class="danger-icon" data-delete-user="' + escapeHtmlClient(user.username) + '" title="Supprimer"><i data-lucide="trash-2"></i></button>') + '</div></div>').join("");
+  document.querySelectorAll("[data-user-totp]").forEach((button) => { button.onclick = () => setupTotp(button.dataset.userTotp); });
+  document.querySelectorAll("[data-disable-totp]").forEach((button) => { button.onclick = () => disableTotp(button.dataset.disableTotp); });
+  document.querySelectorAll("[data-delete-user]").forEach((button) => { button.onclick = () => deleteUser(button.dataset.deleteUser); });
+  lucide.createIcons();
+  applyRole();
+}
+
+async function setupTotp(username) {
+  const setup = await api("/api/users/" + encodeURIComponent(username) + "/totp/setup", { method:"POST", body:"{}" });
+  const token = await requestTextInput("Activer la 2FA", "Clé " + setup.secret + " · code à 6 chiffres");
+  if (!token) return;
+  await api("/api/users/" + encodeURIComponent(username) + "/totp/enable", { method:"POST", body:JSON.stringify({ token }) });
+  toast("Authentification à deux facteurs activée.");
+  await loadUsers();
+}
+
+async function deleteUser(username) {
+  if (!await requireTypedConfirmation("Le compte ne pourra plus se connecter.", username, "Supprimer le compte")) return;
+  await api("/api/users/" + encodeURIComponent(username), { method:"DELETE", body:"{}" });
+  await loadUsers();
+}
+
+async function disableTotp(username) {
+  if (!await requireTypedConfirmation("La connexion ne demandera plus de second facteur.", username, "Désactiver la 2FA")) return;
+  await api("/api/users/" + encodeURIComponent(username) + "/totp", { method:"DELETE", body:"{}" });
+  toast("Authentification à deux facteurs désactivée.");
+  await loadUsers();
+}
+
+function renderFiles() {
+  const search = $("fileSearch").value.trim().toLowerCase();
+  const files = currentFiles.filter((file) => !search || file.name.toLowerCase().includes(search));
+  $("fileList").innerHTML = files.map((file) => {
     const icon = file.type === "directory" ? "folder" : "file-text";
     const info = file.type === "directory" ? "Dossier" : file.sizeLabel;
     return '<button class="file-item" data-file-type="' + file.type + '" data-file-path="' + escapeHtmlClient(file.path) + '">' +
@@ -1111,6 +1696,16 @@ async function loadFiles(path = "") {
     };
   });
   lucide.createIcons();
+}
+
+function renderBreadcrumbs() {
+  const parts = currentFilePath.split("/").filter(Boolean);
+  const crumbs = [{ name:"Racine", path:"" }];
+  parts.forEach((name, index) => crumbs.push({ name, path: parts.slice(0, index + 1).join("/") }));
+  $("fileBreadcrumbs").innerHTML = crumbs.map((crumb) => '<button data-breadcrumb="' + escapeHtmlClient(crumb.path) + '">' + escapeHtmlClient(crumb.name) + '</button>').join("");
+  document.querySelectorAll("[data-breadcrumb]").forEach((button) => {
+    button.onclick = () => loadFiles(button.dataset.breadcrumb).catch((error) => toast(error.message, "error"));
+  });
 }
 
 async function openFile(path) {
@@ -1187,8 +1782,7 @@ async function deleteServerById(id) {
 }
 
 async function action(label, fn, options = {}) {
-  if (busy || (!activeId && !options.allowNoActive)) return;
-  setBusy(true);
+  if (!activeId && !options.allowNoActive) return;
   try {
     await fn();
     toast(label);
@@ -1196,7 +1790,6 @@ async function action(label, fn, options = {}) {
   } catch (error) {
     toast(error.message, "error");
   } finally {
-    setBusy(false);
     renderActive();
   }
 }
@@ -1246,9 +1839,30 @@ $("refreshLogs").onclick = () => refreshLogs().catch((error) => toast(error.mess
 $("startBtn").onclick = () => action("Serveur démarré.", () => api(endpoint("/start"), { method:"POST" }));
 $("stopBtn").onclick = () => action("Serveur arrêté.", () => api(endpoint("/stop"), { method:"POST" }));
 $("restartBtn").onclick = () => action("Serveur redémarré.", () => api(endpoint("/restart"), { method:"POST" }));
-$("reinstallBtn").onclick = async () => {
-  if (!await requireTypedConfirmation("Une sauvegarde sera créée avant de réinstaller les fichiers du serveur.", "REINSTALL", "Réinstaller le serveur")) return;
-  action("Reinstallation terminee.", () => api(endpoint("/reinstall"), { method:"POST", body: JSON.stringify({ confirm: "REINSTALL" }) }));
+$("installServer").onclick = () => action("Installation terminée.", () => api(endpoint("/install"), { method:"POST", body:"{}" }));
+$("updateServer").onclick = async () => {
+  if (!await requireTypedConfirmation("Une sauvegarde sera créée avant la mise à jour.", "REINSTALL", "Mettre à jour Bedrock")) return;
+  action("Mise à jour terminée.", () => api(endpoint("/reinstall"), { method:"POST", body: JSON.stringify({ confirm: "REINSTALL" }) }));
+};
+$("checkVersion").onclick = async () => {
+  try {
+    const data = await api(endpoint("/version"));
+    $("serverVersion").textContent = data.installed + (data.latest !== "Inconnue" ? " / " + data.latest : "");
+    toast("Installée: " + data.installed + " · Disponible: " + data.latest + (data.updateAvailable ? " · Mise à jour disponible" : ""));
+  } catch (error) { toast(error.message, "error"); }
+};
+$("chooseBinary").onclick = () => $("binaryUpload").click();
+$("binaryUpload").onchange = async () => {
+  const file = $("binaryUpload").files[0];
+  if (!file) return;
+  const body = new FormData();
+  body.append("file", file);
+  await action("Binaire importé.", () => api(endpoint("/binary"), { method:"POST", body }));
+  $("binaryUpload").value = "";
+};
+$("copyAddress").onclick = async () => {
+  await navigator.clipboard.writeText($("serverAddress").textContent);
+  toast("Adresse copiée.");
 };
 $("sendCommand").onclick = () => {
   const command = $("commandInput").value.trim();
@@ -1259,7 +1873,10 @@ $("sendCommand").onclick = () => {
 $("commandInput").addEventListener("keydown", (event) => {
   if (event.key === "Enter") $("sendCommand").click();
 });
+$("logSearch").oninput = renderLogs;
+$("logFilter").onchange = renderLogs;
 $("createBackup").onclick = () => action("Sauvegarde créée.", () => api(endpoint("/backups"), { method:"POST" }));
+$("saveBackupPolicy").onclick = () => action("Planification enregistrée.", () => api(endpoint(""), { method:"PATCH", body:JSON.stringify({ backupPolicy:{ enabled:$("backupEnabled").value === "true", intervalMinutes:Number($("backupInterval").value), retention:Number($("backupRetention").value) } }) }));
 $("saveProperties").onclick = () => action("Configuration enregistrée.", () => api(endpoint("/properties-form"), { method:"PUT", body: JSON.stringify({ values: collectPropertyForm() }) }));
 $("saveServer").onclick = () => action("Serveur modifié.", () => api(endpoint(""), {
   method:"PATCH",
@@ -1273,6 +1890,40 @@ $("deleteServer").onclick = () => {
   const server = activeServer();
   if (!server) return;
   deleteServerById(server.id);
+};
+
+$("refreshPlayers").onclick = () => loadPlayers().catch((error) => toast(error.message, "error"));
+$("addAllowlist").onclick = async () => {
+  const name = $("allowlistName").value.trim();
+  if (!name) return;
+  await saveAllowlist([...playerState.allowlist, { name, ignoresPlayerLimit:false }]);
+  $("allowlistName").value = "";
+};
+$("addPermission").onclick = async () => {
+  const xuid = $("permissionXuid").value.trim();
+  if (!xuid) return;
+  await savePermissions([...playerState.permissions.filter((entry) => entry.xuid !== xuid), { xuid, permission:$("permissionRole").value }]);
+  $("permissionXuid").value = "";
+};
+$("chooseWorldImport").onclick = () => $("worldImport").click();
+$("worldImport").onchange = async () => {
+  const file = $("worldImport").files[0];
+  if (!file) return;
+  const body = new FormData();
+  body.append("file", file);
+  await action("Monde importé.", () => api(endpoint("/worlds/import"), { method:"POST", body }));
+  $("worldImport").value = "";
+  await loadWorlds();
+};
+$("refreshActivity").onclick = () => loadActivity().catch((error) => toast(error.message, "error"));
+$("createUser").onclick = async () => {
+  try {
+    await api("/api/users", { method:"POST", body:JSON.stringify({ username:$("newUsername").value, password:$("newUserPassword").value, role:$("newUserRole").value }) });
+    $("newUsername").value = "";
+    $("newUserPassword").value = "";
+    toast("Compte créé.");
+    await loadUsers();
+  } catch (error) { toast(error.message, "error"); }
 };
 
 $("createServerForm").onsubmit = (event) => {
@@ -1307,6 +1958,38 @@ $("createServerForm").onsubmit = (event) => {
 };
 
 $("goUpFile").onclick = () => loadFiles(parentPath(currentFilePath)).catch((error) => toast(error.message));
+$("fileSearch").oninput = renderFiles;
+$("chooseFileUpload").onclick = () => $("fileUpload").click();
+$("fileUpload").onchange = async () => {
+  const file = $("fileUpload").files[0];
+  if (!file) return;
+  const body = new FormData();
+  body.append("file", file);
+  body.append("path", currentFilePath);
+  try {
+    await api(endpoint("/files/upload"), { method:"POST", body });
+  } catch (error) {
+    if (!/déjà ce nom/i.test(error.message) || !await requireTypedConfirmation("Le fichier existant sera remplacé.", file.name, "Écraser le fichier")) throw error;
+    body.set("overwrite", "true");
+    await api(endpoint("/files/upload"), { method:"POST", body });
+  }
+  $("fileUpload").value = "";
+  toast("Fichier importé.");
+  await loadFiles(currentFilePath);
+};
+$("renameFile").onclick = async () => {
+  if (!selectedFilePath) return toast("Sélectionne un fichier.", "error");
+  const name = await requestTextInput("Renommer", "Nouveau nom");
+  if (!name) return;
+  const data = await api(endpoint("/file"), { method:"PATCH", body:JSON.stringify({ path:selectedFilePath, name }) });
+  selectedFilePath = data.file.path;
+  $("fileEditorPath").value = selectedFilePath;
+  await loadFiles(currentFilePath);
+};
+$("downloadFile").onclick = () => {
+  if (!selectedFilePath) return toast("Sélectionne un fichier.", "error");
+  window.location.assign(endpoint("/file/download?path=") + encodeURIComponent(selectedFilePath));
+};
 $("newDirectory").onclick = async () => {
   const name = await requestTextInput("Nouveau dossier", "Nom du dossier");
   if (!name) return;
@@ -1344,14 +2027,14 @@ window.deleteBackup = async (name) => {
 };
 
 lucide.createIcons();
-refreshServers().catch((error) => toast(error.message));
+Promise.all([loadCurrentUser(), refreshServers()]).catch((error) => toast(error.message, "error"));
 setInterval(() => {
   if (viewMode === "detail" && activeId) {
     refreshActive().catch(() => {});
   } else {
     refreshServers().catch(() => {});
   }
-}, 5000);
+}, 10000);
 </script>
 </body>
 </html>`;

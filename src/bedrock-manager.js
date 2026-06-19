@@ -4,6 +4,7 @@ import fs from "node:fs";
 import fsp from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import dgram from "node:dgram";
 import { spawn } from "node:child_process";
 import { pipeline } from "node:stream/promises";
 
@@ -35,6 +36,7 @@ const PROTECTED_ROOT_NAMES = new Set([
   ".dockerignore",
   ".env",
   ".env.example",
+  ".bedrock-version",
   ".panel",
   "node_modules",
   "src",
@@ -61,20 +63,90 @@ export class BedrockManager {
     this.logLines = [];
     this.maxLogs = 1200;
     this.logWaiters = [];
+    this.eventListeners = new Set();
+    this.operationQueue = Promise.resolve();
+    this.pendingOperations = 0;
+    this.queuedOperationTypes = new Set();
+    this.operation = { type: "idle", progress: 0, startedAt: null };
+    this.lastError = "";
+    this.commandHistory = [];
+    this.detectedVersion = "";
+    this.cachedDiskUsage = { value: 0, measuredAt: 0 };
   }
 
   async status() {
     const backups = await this.listBackups();
+    const installed = await exists(this.executablePath());
+    const gamePort = await this.readProperty("server-port");
+    const port = Number(gamePort || 19132);
+    const network = await this.networkStatus(port);
     return {
       running: this.isRunning(),
       uptimeSeconds: this.startedAt ? Math.floor((Date.now() - this.startedAt) / 1000) : 0,
-      gamePort: await this.readProperty("server-port"),
+      gamePort,
       hostIps: localAddresses(),
       worldName: await this.worldName(),
       backupCount: backups.length,
+      lastBackup: backups[0] || null,
       serverDir: this.serverDir,
-      backupDir: this.backupDir
+      backupDir: this.backupDir,
+      installed,
+      installationState: this.installationState(installed),
+      operation: { ...this.operation, pending: this.pendingOperations },
+      lastError: this.lastError,
+      version: await this.installedVersion(),
+      diskUsageBytes: await this.diskUsage(),
+      diskUsageLabel: formatBytes(await this.diskUsage()),
+      network
     };
+  }
+
+  installationState(installed) {
+    if (["installing", "updating", "reinstalling"].includes(this.operation.type)) return "installing";
+    if (installed) return "ready";
+    return this.lastError ? "error" : "not-installed";
+  }
+
+  async runOperation(type, task) {
+    if (this.operation.type === type || this.queuedOperationTypes.has(type)) throw new Error("Cette opération est déjà en cours ou en attente.");
+    this.queuedOperationTypes.add(type);
+    this.pendingOperations += 1;
+    const run = async () => {
+      this.queuedOperationTypes.delete(type);
+      this.pendingOperations -= 1;
+      this.operation = { type, progress: 0, startedAt: new Date().toISOString() };
+      this.lastError = "";
+      this.emitEvent("operation", { operation: { ...this.operation }, pending: this.pendingOperations });
+      try {
+        const result = await task((progress) => this.setProgress(progress));
+        this.setProgress(100);
+        return result;
+      } catch (error) {
+        this.lastError = error.message || "Erreur inconnue";
+        this.emitEvent("error", { message: this.lastError, operation: type });
+        throw error;
+      } finally {
+        this.operation = { type: "idle", progress: 0, startedAt: null };
+        this.emitEvent("operation", { operation: { ...this.operation }, pending: this.pendingOperations });
+      }
+    };
+    const queued = this.operationQueue.catch(() => {}).then(run);
+    this.operationQueue = queued;
+    return queued;
+  }
+
+  setProgress(progress) {
+    this.operation.progress = Math.max(0, Math.min(100, Number(progress) || 0));
+    this.emitEvent("operation", { operation: { ...this.operation }, pending: this.pendingOperations });
+  }
+
+  subscribe(listener) {
+    this.eventListeners.add(listener);
+    return () => this.eventListeners.delete(listener);
+  }
+
+  emitEvent(type, data) {
+    for (const listener of this.eventListeners) listener({ type, data, at: new Date().toISOString() });
   }
 
   logs(limit = 300) {
@@ -138,16 +210,26 @@ export class BedrockManager {
     }
     this.child.stdin.write(`${command}\n`);
     this.appendLog(`[commande] ${command}\n`);
+    this.commandHistory.push({ command, createdAt: new Date().toISOString() });
+    if (this.commandHistory.length > 100) this.commandHistory.shift();
   }
 
-  async reinstall() {
+  recentCommands() {
+    return [...this.commandHistory].reverse();
+  }
+
+  async reinstall(reportProgress = () => {}) {
     const wasRunning = this.isRunning();
-    const backup = await this.createBackup();
+    reportProgress(5);
+    const backup = await this.createBackup("update");
+    reportProgress(20);
     await this.stop();
-    await this.installBedrock(true);
+    reportProgress(30);
+    await this.installBedrock(true, (progress) => reportProgress(30 + Math.round(progress * 0.65)));
     if (wasRunning || this.autoStart) {
       await this.start();
     }
+    reportProgress(100);
     return { backup };
   }
 
@@ -182,7 +264,7 @@ export class BedrockManager {
     }
   }
 
-  async installBedrock(force) {
+  async installBedrock(force, reportProgress = () => {}) {
     if (!force && (await exists(this.executablePath()))) return;
     if (process.platform === "win32") {
       throw new Error("Telechargement automatique prevu pour Linux. Garde bedrock_server.exe pour le local Windows.");
@@ -193,13 +275,19 @@ export class BedrockManager {
     const extractDir = path.join(tmpDir, "extract");
     await fsp.mkdir(extractDir, { recursive: true });
     this.appendLog(`[panel] Telechargement Bedrock Linux: ${url}\n`);
+    reportProgress(10);
     await downloadFile(url, zipPath);
+    reportProgress(55);
     await extractZip(zipPath, extractDir);
+    reportProgress(75);
     await copyDirectory(extractDir, this.serverDir, {
       excludeRootNames: new Set(["worlds", "allowlist.json", "permissions.json"])
     });
     await fsp.chmod(this.executablePath(), 0o755).catch(() => {});
+    const version = versionFromUrl(url);
+    if (version) await fsp.writeFile(path.join(this.serverDir, ".bedrock-version"), version, "utf8");
     await fsp.rm(tmpDir, { recursive: true, force: true });
+    reportProgress(100);
     this.appendLog("[panel] Installation Bedrock terminee\n");
   }
 
@@ -242,7 +330,7 @@ export class BedrockManager {
     return worldFolder || "Bedrock level";
   }
 
-  async createBackup() {
+  async createBackup(origin = "manual") {
     await fsp.mkdir(this.backupDir, { recursive: true });
     let saveHeld = false;
     if (this.isRunning()) {
@@ -251,7 +339,8 @@ export class BedrockManager {
       await this.waitForLog(/ready to be copied|saving has been disabled|save hold|saved/i, 15000);
     }
     const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-    const filename = `bedrock-backup-${stamp}.zip`;
+    const safeOrigin = ["manual", "automatic", "update"].includes(origin) ? origin : "manual";
+    const filename = `bedrock-${safeOrigin}-${stamp}.zip`;
     const target = path.join(this.backupDir, filename);
     try {
       await archivePaths(this.serverDir, target, [...BEDROCK_FOLDERS, ...BEDROCK_FILES]);
@@ -261,7 +350,7 @@ export class BedrockManager {
       }
     }
     const stats = await fsp.stat(target);
-    return { name: filename, size: stats.size, sizeLabel: formatBytes(stats.size), createdAt: stats.mtime.toISOString() };
+    return { name: filename, origin: safeOrigin, size: stats.size, sizeLabel: formatBytes(stats.size), createdAt: stats.mtime.toISOString() };
   }
 
   async listBackups() {
@@ -272,7 +361,7 @@ export class BedrockManager {
       if (!entry.isFile() || !entry.name.endsWith(".zip")) continue;
       const file = path.join(this.backupDir, entry.name);
       const stats = await fsp.stat(file);
-      backups.push({ name: entry.name, size: stats.size, sizeLabel: formatBytes(stats.size), createdAt: stats.mtime.toISOString() });
+      backups.push({ name: entry.name, origin: backupOrigin(entry.name), size: stats.size, sizeLabel: formatBytes(stats.size), createdAt: stats.mtime.toISOString() });
     }
     return backups.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
@@ -301,6 +390,202 @@ export class BedrockManager {
 
   async deleteBackup(name) {
     await fsp.rm(await this.resolveBackup(name), { force: true });
+  }
+
+  async enforceBackupRetention(maxBackups) {
+    const limit = Math.max(1, Math.min(100, Number(maxBackups) || 10));
+    const backups = await this.listBackups();
+    for (const backup of backups.slice(limit)) await this.deleteBackup(backup.name);
+  }
+
+  async installedVersion() {
+    if (this.detectedVersion) return this.detectedVersion;
+    try {
+      return (await fsp.readFile(path.join(this.serverDir, ".bedrock-version"), "utf8")).trim();
+    } catch (error) {
+      if (error.code === "ENOENT") return "Inconnue";
+      throw error;
+    }
+  }
+
+  async latestVersionInfo() {
+    const url = this.downloadUrl || (await resolveLatestBedrockUrl());
+    const latest = versionFromUrl(url) || "Inconnue";
+    const installed = await this.installedVersion();
+    return { installed, latest, updateAvailable: installed !== "Inconnue" && latest !== "Inconnue" && installed !== latest };
+  }
+
+  async diskUsage() {
+    if (Date.now() - this.cachedDiskUsage.measuredAt < 10000) return this.cachedDiskUsage.value;
+    const value = await directorySize(this.serverDir).catch(() => 0);
+    this.cachedDiskUsage = { value, measuredAt: Date.now() };
+    return value;
+  }
+
+  async networkStatus(port) {
+    const available = await udpPortAvailable(port);
+    const publicHost = process.env.PUBLIC_IP || process.env.RAILWAY_PUBLIC_DOMAIN || "";
+    return {
+      localAddress: `${localAddresses()[0] || "127.0.0.1"}:${port}`,
+      publicAddress: publicHost ? `${publicHost}:${port}` : "",
+      udpState: this.isRunning() ? "expected-open" : (available ? "closed" : "in-use"),
+      warning: !this.isRunning() ? "Le serveur est arrêté." : ""
+    };
+  }
+
+  async listPlayers() {
+    if (!this.isRunning()) return [];
+    const offset = this.logLines.length;
+    this.sendCommand("list");
+    await delay(700);
+    const output = this.logLines.slice(offset).join("");
+    const lines = output.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    const marker = lines.findIndex((line) => /players online|joueurs en ligne/i.test(line));
+    if (marker === -1) return [];
+    const inline = lines[marker].split(":").slice(1).join(":").trim();
+    const names = inline || lines[marker + 1] || "";
+    return names.split(",").map((name) => name.trim()).filter(Boolean);
+  }
+
+  kickPlayer(name, reason = "Expulsé par un administrateur") {
+    const safeName = String(name || "").replace(/[\r\n"]/g, "").trim();
+    if (!safeName) throw new Error("Nom de joueur invalide.");
+    this.sendCommand(`kick "${safeName}" ${String(reason || "").replace(/[\r\n]/g, " ")}`);
+  }
+
+  async allowlist() {
+    return this.readJsonFile("allowlist.json", []);
+  }
+
+  async saveAllowlist(entries) {
+    const rows = (Array.isArray(entries) ? entries : []).map((entry) => ({
+      name: String(entry.name || "").trim(),
+      ignoresPlayerLimit: Boolean(entry.ignoresPlayerLimit)
+    })).filter((entry) => entry.name);
+    await this.writeJsonFile("allowlist.json", rows);
+    if (this.isRunning()) this.sendCommand("allowlist reload");
+    return rows;
+  }
+
+  async permissions() {
+    return this.readJsonFile("permissions.json", []);
+  }
+
+  async savePermissions(entries) {
+    const allowed = new Set(["visitor", "member", "operator"]);
+    const rows = (Array.isArray(entries) ? entries : []).map((entry) => ({
+      permission: allowed.has(entry.permission) ? entry.permission : "member",
+      xuid: String(entry.xuid || "").trim()
+    })).filter((entry) => entry.xuid);
+    await this.writeJsonFile("permissions.json", rows);
+    if (this.isRunning()) this.sendCommand("permission reload");
+    return rows;
+  }
+
+  async readJsonFile(name, fallback) {
+    try {
+      return JSON.parse(await fsp.readFile(path.join(this.serverDir, name), "utf8"));
+    } catch (error) {
+      if (error.code === "ENOENT") return fallback;
+      throw new Error(`${name} est invalide: ${error.message}`);
+    }
+  }
+
+  async writeJsonFile(name, value) {
+    await fsp.mkdir(this.serverDir, { recursive: true });
+    await fsp.writeFile(path.join(this.serverDir, name), JSON.stringify(value, null, 2), "utf8");
+  }
+
+  async listWorlds() {
+    const worldsDir = path.join(this.serverDir, "worlds");
+    await fsp.mkdir(worldsDir, { recursive: true });
+    const activeWorld = await this.readProperty("level-name");
+    const entries = await fsp.readdir(worldsDir, { withFileTypes: true });
+    const worlds = [];
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const worldDir = path.join(worldsDir, entry.name);
+      const stats = await fsp.stat(worldDir);
+      const size = await directorySize(worldDir);
+      worlds.push({
+        name: entry.name,
+        active: entry.name === activeWorld,
+        size,
+        sizeLabel: formatBytes(size),
+        modifiedAt: stats.mtime.toISOString()
+      });
+    }
+    return worlds.sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name));
+  }
+
+  async importWorld(archivePath, originalName = "monde.mcworld") {
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-world-import-"));
+    try {
+      await extractZip(archivePath, tmpDir);
+      const entries = await fsp.readdir(tmpDir, { withFileTypes: true });
+      let source = tmpDir;
+      if (entries.length === 1 && entries[0].isDirectory()) source = path.join(tmpDir, entries[0].name);
+      const levelName = await fsp.readFile(path.join(source, "levelname.txt"), "utf8").catch(() => "");
+      const requested = levelName.trim() || path.basename(originalName, path.extname(originalName));
+      const name = await uniqueDirectoryName(path.join(this.serverDir, "worlds"), safeWorldName(requested));
+      await copyDirectory(source, path.join(this.serverDir, "worlds", name));
+      return { name };
+    } finally {
+      await fsp.rm(tmpDir, { recursive: true, force: true });
+    }
+  }
+
+  async exportWorld(name, target) {
+    const safeName = safeWorldName(name);
+    const worldDir = path.join(this.serverDir, "worlds", safeName);
+    await assertExists(worldDir, "Monde introuvable.");
+    await archivePaths(path.join(this.serverDir, "worlds"), target, [safeName]);
+  }
+
+  async duplicateWorld(name, newName) {
+    const source = path.join(this.serverDir, "worlds", safeWorldName(name));
+    await assertExists(source, "Monde introuvable.");
+    const targetName = await uniqueDirectoryName(path.join(this.serverDir, "worlds"), safeWorldName(newName));
+    await copyDirectory(source, path.join(this.serverDir, "worlds", targetName));
+    return { name: targetName };
+  }
+
+  async activateWorld(name) {
+    const safeName = safeWorldName(name);
+    await assertExists(path.join(this.serverDir, "worlds", safeName), "Monde introuvable.");
+    const wasRunning = this.isRunning();
+    if (wasRunning) await this.stop();
+    const content = await this.readProperties();
+    await this.writeProperties(setPropertyValue(content, "level-name", safeName));
+    if (wasRunning) await this.start();
+    return { name:safeName };
+  }
+
+  async resetWorld(name) {
+    const safeName = safeWorldName(name);
+    const wasRunning = this.isRunning();
+    if (wasRunning) await this.stop();
+    await fsp.rm(path.join(this.serverDir, "worlds", safeName), { recursive: true, force: true });
+    if (wasRunning) await this.start();
+  }
+
+  async restoreWorldFromBackup(backupName, worldName) {
+    const backup = await this.resolveBackup(backupName);
+    const safeName = safeWorldName(worldName);
+    const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-world-restore-"));
+    const wasRunning = this.isRunning();
+    try {
+      if (wasRunning) await this.stop();
+      await extractZip(backup, tmpDir);
+      const source = path.join(tmpDir, "worlds", safeName);
+      await assertExists(source, "Ce monde n'existe pas dans la sauvegarde.");
+      const target = path.join(this.serverDir, "worlds", safeName);
+      await fsp.rm(target, { recursive: true, force: true });
+      await copyDirectory(source, target);
+    } finally {
+      await fsp.rm(tmpDir, { recursive: true, force: true });
+      if (wasRunning) await this.start();
+    }
   }
 
   async listFiles(relativePath = "") {
@@ -344,6 +629,31 @@ export class BedrockManager {
     await fsp.mkdir(this.resolveServerPath(relativePath), { recursive: true });
   }
 
+  async uploadFile(relativePath, temporaryFile, overwrite = false) {
+    const target = this.resolveServerPath(relativePath);
+    if (!overwrite && (await exists(target))) throw new Error("Un fichier porte déjà ce nom.");
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.copyFile(temporaryFile, target);
+    return { path: toPosix(path.relative(this.serverDir, target)) };
+  }
+
+  async renameFile(relativePath, newName) {
+    const source = this.resolveServerPath(relativePath);
+    const safeName = path.basename(String(newName || "").trim());
+    if (!safeName || safeName !== String(newName || "").trim()) throw new Error("Nouveau nom invalide.");
+    const target = this.resolveServerPath(toPosix(path.join(path.dirname(relativePath), safeName)));
+    if (await exists(target)) throw new Error("Un élément porte déjà ce nom.");
+    await fsp.rename(source, target);
+    return { path: toPosix(path.relative(this.serverDir, target)) };
+  }
+
+  async resolveDownload(relativePath) {
+    const target = this.resolveServerPath(relativePath);
+    const stats = await fsp.stat(target);
+    if (!stats.isFile()) throw new Error("Ce chemin n'est pas un fichier.");
+    return target;
+  }
+
   async deleteFile(relativePath) {
     const target = this.resolveServerPath(relativePath);
     if (path.resolve(target) === path.resolve(this.serverDir)) {
@@ -380,6 +690,9 @@ export class BedrockManager {
       }
     }
     this.logWaiters = this.logWaiters.filter((waiter) => !waiter.done);
+    const versionMatch = text.match(/(?:version|Version)\s+([0-9]+(?:\.[0-9]+){2,3})/);
+    if (versionMatch) this.detectedVersion = versionMatch[1];
+    this.emitEvent("logs", { lines: parts.filter(Boolean) });
   }
 
   waitForLog(pattern, timeoutMs) {
@@ -530,6 +843,62 @@ function formatBytes(bytes) {
     unit = units.shift();
   }
   return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
+}
+
+function backupOrigin(name) {
+  const match = String(name).match(/^bedrock-(manual|automatic|update)-/);
+  return match ? match[1] : "legacy";
+}
+
+function versionFromUrl(url) {
+  return String(url).match(/bedrock-server-([0-9.]+)\.zip/i)?.[1] || "";
+}
+
+async function directorySize(directory) {
+  if (!(await exists(directory))) return 0;
+  let total = 0;
+  const entries = await fsp.readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const target = path.join(directory, entry.name);
+    if (entry.isDirectory()) total += await directorySize(target);
+    else if (entry.isFile()) total += (await fsp.stat(target)).size;
+  }
+  return total;
+}
+
+async function udpPortAvailable(port) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
+  return new Promise((resolve) => {
+    const socket = dgram.createSocket("udp4");
+    socket.once("error", () => {
+      try { socket.close(); } catch {}
+      resolve(false);
+    });
+    socket.bind(port, "0.0.0.0", () => {
+      socket.close();
+      resolve(true);
+    });
+  });
+}
+
+function safeWorldName(value) {
+  const name = String(value || "Monde").trim().replace(/[<>:"/\\|?*\x00-\x1F]/g, "-").slice(0, 80);
+  if (!name || name === "." || name === "..") throw new Error("Nom de monde invalide.");
+  return name;
+}
+
+function setPropertyValue(content, key, value) {
+  const lines = String(content || "").split(/\r?\n/);
+  const index = lines.findIndex((line) => line.startsWith(`${key}=`));
+  if (index === -1) lines.push(`${key}=${value}`);
+  else lines[index] = `${key}=${value}`;
+  return lines.join("\n");
+}
+
+async function uniqueDirectoryName(parent, requested) {
+  let name = requested;
+  for (let index = 2; await exists(path.join(parent, name)); index += 1) name = `${requested}-${index}`;
+  return name;
 }
 
 function localAddresses() {
