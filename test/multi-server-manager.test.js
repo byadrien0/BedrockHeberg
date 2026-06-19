@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fsp from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { BedrockManager } from "../src/bedrock-manager.js";
 import {
   MultiServerManager,
   cleanName,
@@ -54,6 +55,35 @@ test("server registry writes replace an existing JSON file cleanly", async () =>
     const saved = JSON.parse(await fsp.readFile(manager.configPath, "utf8"));
     assert.equal(saved.servers[0].name, "Serveur test");
     assert.equal(await fsp.stat(manager.configPath).then(() => true), true);
+  } finally {
+    await fsp.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("missing server.properties is treated as an empty configuration", async () => {
+  const rootDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-properties-test-"));
+  try {
+    const manager = new BedrockManager({
+      rootDir,
+      serverDir: path.join(rootDir, "server"),
+      backupDir: path.join(rootDir, "backups"),
+      seedDir: path.join(rootDir, "missing-seed")
+    });
+    assert.equal(await manager.readProperties(), "");
+  } finally {
+    await fsp.rm(rootDir, { recursive: true, force: true });
+  }
+});
+
+test("Windows can create server configuration before the executable is installed", { skip: process.platform !== "win32" }, async () => {
+  const rootDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-create-test-"));
+  try {
+    const manager = new MultiServerManager({ rootDir, autoStart: false });
+    await manager.initialize();
+    const created = await manager.create({ name: "Serveur local", port: 19140 });
+    const properties = await fsp.readFile(path.join(created.serverDir, "server.properties"), "utf8");
+    assert.match(properties, /server-name=Serveur local/);
+    assert.match(properties, /server-port=19140/);
   } finally {
     await fsp.rm(rootDir, { recursive: true, force: true });
   }

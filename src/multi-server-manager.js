@@ -104,10 +104,18 @@ export class MultiServerManager {
     this.servers.push(server);
     this.rebuildManagers();
     const manager = this.requireManager(id);
-    await manager.prepare();
-    await updateProperties(manager, { name, port });
-    await this.saveConfig();
-    return { ...publicServer(server), status: await manager.status() };
+    try {
+      await manager.prepare({ allowMissingExecutable: process.platform === "win32" });
+      await updateProperties(manager, { name, port });
+      await this.saveConfig();
+      return { ...publicServer(server), status: await manager.status() };
+    } catch (error) {
+      this.servers = this.servers.filter((item) => item.id !== id);
+      this.managers.delete(id);
+      await fsp.rm(serverDir, { recursive: true, force: true }).catch(() => {});
+      await fsp.rm(backupDir, { recursive: true, force: true }).catch(() => {});
+      throw error;
+    }
   }
 
   async update(id, input) {

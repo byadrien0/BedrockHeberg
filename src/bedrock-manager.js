@@ -151,7 +151,7 @@ export class BedrockManager {
     return { backup };
   }
 
-  async prepare() {
+  async prepare(options = {}) {
     await fsp.mkdir(this.serverDir, { recursive: true });
     await fsp.mkdir(this.backupDir, { recursive: true });
     await this.seedInitialFiles();
@@ -159,6 +159,7 @@ export class BedrockManager {
       if (process.platform === "win32" && (await exists(path.join(this.serverDir, "bedrock_server.exe")))) {
         return;
       }
+      if (process.platform === "win32" && options.allowMissingExecutable) return;
       await this.installBedrock(false);
     }
   }
@@ -208,7 +209,12 @@ export class BedrockManager {
 
   async readProperties() {
     const file = path.join(this.serverDir, "server.properties");
-    return exists(file) ? fsp.readFile(file, "utf8") : "";
+    try {
+      return await fsp.readFile(file, "utf8");
+    } catch (error) {
+      if (error.code === "ENOENT") return "";
+      throw error;
+    }
   }
 
   async writeProperties(content) {
