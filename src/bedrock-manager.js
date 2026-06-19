@@ -787,7 +787,7 @@ async function resolveLatestBedrockUrl(platform = process.platform) {
   const downloadType = platform === "win32" ? "serverBedrockWindows" : "serverBedrockLinux";
   try {
     const manifest = await fetch("https://net-secondary.web.minecraft-services.net/api/v1.0/download/links", {
-      headers: { "User-Agent": "BedrockHeberg/1.0" }
+      headers: { "User-Agent": "ServerAura/1.0" }
     });
     if (manifest.ok) {
       const url = bedrockDownloadUrlFromManifest(await manifest.json(), downloadType);
@@ -798,7 +798,7 @@ async function resolveLatestBedrockUrl(platform = process.platform) {
   }
 
   const page = await fetch("https://www.minecraft.net/en-us/download/server/bedrock", {
-    headers: { "User-Agent": "Mozilla/5.0 bedrock-railway-panel" }
+    headers: { "User-Agent": "Mozilla/5.0 ServerAura" }
   });
   if (!page.ok) {
     throw new Error(`Page de telechargement Minecraft inaccessible (${page.status}).`);
@@ -823,7 +823,7 @@ export function bedrockDownloadUrlFromHtml(html, platform = process.platform) {
 }
 
 async function downloadFile(url, target) {
-  const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 bedrock-railway-panel" } });
+  const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 ServerAura" } });
   if (!response.ok || !response.body) {
     throw new Error(`Telechargement impossible (${response.status}).`);
   }

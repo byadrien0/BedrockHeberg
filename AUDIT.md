@@ -1,4 +1,4 @@
-# Audit BedrockHeberg
+# Audit ServerAura
 
 ## Constats
 
@@ -12,7 +12,7 @@
 
 - Retrait de l'index Git des artefacts Bedrock lourds sans les supprimer du disque local.
 - Ajout des dossiers/fichiers runtime Bedrock dans `.gitignore` et `.dockerignore`.
-- Allegement du Dockerfile: l'image contient le panel, puis le binaire Bedrock Linux officiel est telecharge au demarrage.
+- Allegement du Dockerfile: l'image contient le panel, puis le binaire Bedrock officiel adapte au systeme est telecharge au demarrage.
 - Ajout d'un script `npm run check` pour valider la syntaxe des fichiers Node.
 - Refus de demarrage en production si `ADMIN_PASSWORD` ou `SESSION_SECRET` manquent.
 - Ajout d'en-tetes HTTP de base et d'une limite simple sur les echecs de connexion.

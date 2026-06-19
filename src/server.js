@@ -553,7 +553,7 @@ function loginHtml(error = "") {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bedrock Host Panel</title>
+  <title>Connexion - ServerAura</title>
   <style>
     :root { color-scheme: dark; --ink:#f7f8ff; --line:#394059; --panel:#272c42; --blue:#5b8cff; --red:#ff8d91; --bg:#111522; }
     * { box-sizing:border-box; }
@@ -571,7 +571,7 @@ function loginHtml(error = "") {
 </head>
 <body>
   <main>
-    <h1>Bedrock Host Panel</h1>
+    <h1>ServerAura</h1>
     <form method="post" action="/login">
       <label for="username">Utilisateur</label>
       <input id="username" name="username" value="admin" autocomplete="username" required>
@@ -593,7 +593,7 @@ function panelHtml(csrfToken = "") {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Bedrock Host Panel</title>
+  <title>ServerAura</title>
   <script src="/assets/lucide.min.js"></script>
   <style>
     :root { --ink:#f4f6fa; --muted:#aeb5c2; --bg:#111318; --panel:#272a32; --panel-2:#30343d; --panel-3:#1b1e25; --line:#3c414c; --blue:#5b8cff; --blue-2:#253650; --red:#ef666c; --green:#50c982; --amber:#e8b45e; --code:#101216; --soft:#20242c; }
@@ -870,7 +870,7 @@ function panelHtml(csrfToken = "") {
 <body>
   <div class="shell">
     <aside class="sidebar">
-      <div class="brand"><span class="brand-mark"><i data-lucide="zap"></i></span><span>BEDROCK</span></div>
+      <div class="brand"><span class="brand-mark"><i data-lucide="zap"></i></span><span>ServerAura</span></div>
       <div class="side-group">
         <h3>Menu</h3>
         <button class="nav-item active" id="navServers"><i data-lucide="cloud"></i>Mes serveurs</button>

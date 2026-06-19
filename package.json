@@ -1,7 +1,13 @@
 {
-  "name": "bedrock-railway-panel",
+  "name": "serveraura",
   "version": "1.0.0",
+  "description": "Panneau professionnel de gestion multi-serveurs Minecraft Bedrock.",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/byadrien0/ServerAura.git"
+  },
+  "keywords": ["minecraft", "bedrock", "server", "hosting", "panel"],
   "type": "module",
   "scripts": {
     "check": "node --check src/server.js && node --check src/bedrock-manager.js && node --check src/multi-server-manager.js && node --check src/activity-store.js && node --check src/user-store.js",

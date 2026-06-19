@@ -59,7 +59,7 @@ export class UserStore {
     await this.save();
     return {
       secret: user.totpSecret,
-      uri: `otpauth://totp/BedrockHeberg:${encodeURIComponent(username)}?secret=${user.totpSecret}&issuer=BedrockHeberg&digits=6&period=30`
+      uri: `otpauth://totp/ServerAura:${encodeURIComponent(username)}?secret=${user.totpSecret}&issuer=ServerAura&digits=6&period=30`
     };
   }
 

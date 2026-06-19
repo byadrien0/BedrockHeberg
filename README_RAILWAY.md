@@ -1,4 +1,4 @@
-# Bedrock Railway Panel
+# Déployer ServerAura sur Railway
 
 Cette app lance et gere plusieurs serveurs Minecraft Bedrock Dedicated Server avec une interface web Node.js.
 
@@ -15,7 +15,7 @@ Cette app lance et gere plusieurs serveurs Minecraft Bedrock Dedicated Server av
 - upload, telechargement et renommage de fichiers;
 - comptes administrateur/lecture seule et TOTP facultatif;
 - historique persistant des operations;
-- reinstallation du binaire Bedrock Linux officiel;
+- installation et mise a jour du binaire Bedrock officiel;
 - copie initiale optionnelle depuis un dossier seed vers un volume persistant.
 
 ## Variables Railway
@@ -64,7 +64,7 @@ npm run test:browser
 
 Les tests API et navigateur attendent le panel sur `http://127.0.0.1:3001` avec le mot de passe local `admin`, sauf si `TEST_BASE_URL` et `TEST_ADMIN_PASSWORD` sont definis.
 
-Au premier demarrage, l'app cree un serveur `principal`, copie les donnees presentes dans `SEED_DIR` si ce dossier existe, telecharge le serveur Bedrock Linux officiel, puis lance les serveurs en auto-start.
+Au premier demarrage, l'app cree un serveur `principal`, copie les donnees presentes dans `SEED_DIR` si ce dossier existe, telecharge le serveur Bedrock officiel adapte au systeme, puis lance les serveurs en auto-start.
 
 Les nouveaux serveurs crees depuis l'interface sont places dans `/data/servers/<id>` et leurs sauvegardes dans `/data/backups/<id>`.
 
