@@ -752,6 +752,119 @@ function panelHtml(csrfToken = "") {
     @media (max-width: 1120px) { .shell { grid-template-columns:1fr; } .sidebar { position:relative; min-height:auto; max-height:none; } .dashboard, .tab-panel.split.active, .overview-board, .file-layout { grid-template-columns:1fr; } .grid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
     @media (max-width: 620px) { .sidebar { min-height:auto; max-height:none; padding:12px 14px; display:flex; align-items:center; gap:12px; } .brand { font-size:19px; } .brand-mark { width:32px; height:32px; } .sidebar .plan-card, .side-group h3 { display:none; } .side-group { margin-left:auto; display:flex; } .nav-item { min-height:38px; padding:0 9px; } .nav-item { font-size:0; } .nav-item svg { margin:0; } .main { padding:14px; } .overview-hero, .hero { display:grid; align-items:start; } .hero .actions { justify-content:flex-start; } .tabs-nav { display:grid; overflow:auto; } .tab-list { flex-wrap:nowrap; } .grid, .left-column .grid, .fields, .server-stats, .form-grid, .two-columns { grid-template-columns:1fr; } .server-card { grid-template-columns:42px minmax(0, 1fr); } .server-card-actions { grid-column:1 / -1; justify-content:flex-start; } .actions button, .actions a.button { flex:1 1 auto; } .modal-footer { display:grid; grid-template-columns:1fr 1fr; } .activity-row { grid-template-columns:1fr; gap:4px; } .lifecycle i { display:none; } }
     @media (max-width: 620px) { .shell { grid-template-rows:68px auto; align-content:start; } .sidebar { height:68px; min-height:68px; max-height:68px; } .server-card-meta { display:grid; gap:4px; } }
+    /* Professional control-panel theme */
+    :root { --ink:#f2f4f7; --muted:#8d96a5; --bg:#0d1015; --panel:#171b22; --panel-2:#1d222b; --panel-3:#12161c; --line:#2a303a; --blue:#3b82f6; --blue-2:#182a46; --red:#e0525b; --green:#38b875; --amber:#d7a449; --code:#090c10; --soft:#14181f; }
+    body { background:var(--bg); color:var(--ink); font-family:Inter, "Segoe UI", system-ui, sans-serif; font-size:14px; }
+    body::before { display:none; }
+    h1 { font-size:26px; line-height:1.2; font-weight:750; }
+    h2 { font-size:16px; font-weight:700; }
+    h3 { font-size:11px; font-weight:650; letter-spacing:0; }
+    .shell { grid-template-columns:248px minmax(0, 1fr); }
+    .sidebar { padding:20px 14px; background:#11151b; border-color:#242a33; gap:26px; }
+    .brand { padding:0 8px; font-size:18px; font-weight:750; }
+    .brand-mark { width:32px; height:32px; border-radius:6px; background:#2563eb; box-shadow:none; }
+    .nav-item { min-height:40px; border-radius:6px; font-size:13px; font-weight:600; }
+    .nav-item.active { color:#eaf2ff; background:#1d2d48; box-shadow:inset 2px 0 0 #60a5fa; }
+    .plan-card { margin-top:auto; padding:12px; border-color:#2c333e; background:#151a21; box-shadow:none; }
+    .plan-title { font-weight:650; }
+    .plan-card .server-icon { width:30px; height:30px; background:#173b2a; color:#68d998; }
+    .main { padding:24px clamp(20px, 3vw, 44px) 44px; gap:20px; }
+    .view.active { gap:20px; }
+    .overview-hero { min-height:74px; align-items:center; padding:0; }
+    .overview-hero p { margin-top:5px; font-size:13px; font-weight:450; }
+    .topbar { display:contents; }
+    #detailView.active { display:grid; grid-template-columns:216px minmax(0, 1fr); gap:20px; align-items:start; }
+    #detailView .crumb, #detailView .hero { grid-column:1 / -1; }
+    #detailView .crumb { grid-row:1; width:max-content; font-size:13px; font-weight:550; }
+    #detailView .hero { grid-row:2; align-items:center; min-height:68px; padding-bottom:18px; border-bottom:1px solid var(--line); }
+    .hero-meta { margin-top:7px; gap:14px; font-size:12px; font-weight:500; }
+    .hero .actions { align-items:center; }
+    .tabs-nav { grid-column:1; grid-row:3; position:sticky; top:20px; min-height:0; padding:8px; display:grid; gap:8px; background:transparent; border:0; border-radius:0; }
+    .tab-list { display:grid; gap:3px; }
+    #moreTab { display:none !important; }
+    .tab { width:100%; min-height:38px; padding:0 10px; justify-content:flex-start; gap:10px; border-radius:6px; font-size:13px; font-weight:550; }
+    .tab:hover { background:#181e27; }
+    .tab.active { color:#eff6ff; background:#1b2d49; box-shadow:inset 2px 0 0 #60a5fa; }
+    .tabs-nav > .actions { padding-top:8px; border-top:1px solid var(--line); }
+    #refreshDetail { width:100%; background:transparent; }
+    #detailView > .tab-panel.active { grid-column:2; grid-row:3; min-width:0; }
+    section, .panel { background:var(--panel); border-color:var(--line); border-radius:7px; box-shadow:none; }
+    .head { min-height:56px; padding:14px 18px; border-color:#252b34; }
+    .content { padding:18px; }
+    button, a.button { min-height:38px; border-radius:6px; padding:0 12px; background:#232933; border-color:#303744; font-size:13px; font-weight:600; box-shadow:none; }
+    button:hover, a.button:hover { background:#2b3340; border-color:#3a4453; }
+    button.primary, button.blue { background:#2563eb; border-color:#2563eb; }
+    button.primary:hover, button.blue:hover { background:#3472f0; }
+    button.red { background:transparent; border-color:#65353b; color:#ff9ba1; }
+    button.red:hover { background:#522b31; color:#fff; }
+    button.amber { background:#29261e; border-color:#55472e; color:#e8c47d; }
+    button.icon { width:38px; }
+    label { margin-bottom:6px; color:#9aa3b2; font-size:11px; font-weight:650; letter-spacing:0; }
+    input, select { height:40px; padding:0 11px; background:#11161e; border-color:#303844; border-radius:6px; }
+    input:focus, select:focus, textarea:focus { outline:2px solid rgba(59,130,246,.18); border-color:#4c8bf5; }
+    textarea { background:#0e131a; border-color:#303844; border-radius:6px; }
+    .grid, .left-column .grid { grid-template-columns:repeat(3, minmax(150px, 1fr)); gap:0; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+    .metric { min-height:92px; padding:15px 16px; border:0; border-right:1px solid var(--line); border-bottom:1px solid var(--line); border-radius:0; background:transparent; }
+    .metric:nth-child(3n) { border-right:0; }
+    .metric span { font-size:10px; font-weight:650; }
+    .metric strong { margin-top:10px; font-size:16px; font-weight:650; }
+    .install-panel { padding:16px; background:#131820; border-color:#2d3540; }
+    .install-panel.ready { border-color:#28583f; }
+    .preflight { background:#1b1914; border-color:#4c4029; }
+    .lifecycle span { border-color:#343c47; background:#171c23; font-weight:550; }
+    .server-card { min-height:78px; padding:13px 14px; background:transparent; border-color:var(--line); }
+    .server-card:hover { background:#1b2028; border-color:#38414e; }
+    .server-card.active { border-color:#3b82f6; box-shadow:inset 2px 0 0 #3b82f6; }
+    .server-icon { background:#173b2a; color:#68d998; box-shadow:none; }
+    .server-card-title strong { font-size:15px; font-weight:650; }
+    .server-card-meta { font-weight:450; }
+    .pill { border-radius:5px; padding:5px 8px; background:#1b212a; border-color:#343d49; font-size:12px; font-weight:600; }
+    .pill.ok { background:#142b21; border-color:#28583f; }
+    .pill.off { background:#2b1b1e; border-color:#63353b; }
+    .badge { background:#222a36; color:#b8c1cf; font-weight:650; }
+    .badge.ok { background:#153025; color:#84dba7; }
+    .data-row, .backup-list li, .file-item { background:#141920; border-color:#29313b; }
+    .toast { background:#1d2531; border-color:#3a4657; border-radius:6px; }
+    .danger-zone { margin-top:24px; padding-top:18px; border-top:1px solid #3b292d; display:flex; align-items:center; justify-content:space-between; gap:18px; }
+    .danger-zone > div { display:grid; gap:4px; }
+    .danger-zone strong { color:#f2c6c9; font-size:13px; }
+    .danger-zone span { color:var(--muted); font-size:12px; }
+    .progress { height:5px; background:#0b0f14; }
+    pre { background:#090d12; }
+    dialog.modal { background:#171c24; border-color:#333b47; }
+    .modal-footer { background:#13171e; }
+    @media (max-width: 1100px) {
+      .shell { grid-template-columns:220px minmax(0, 1fr); }
+      .grid, .left-column .grid { grid-template-columns:repeat(2, minmax(140px, 1fr)); }
+      .metric:nth-child(3n) { border-right:1px solid var(--line); }
+      .metric:nth-child(2n) { border-right:0; }
+    }
+    @media (max-width: 820px) {
+      .shell { grid-template-columns:1fr; grid-template-rows:64px auto; }
+      .sidebar { position:relative; min-height:64px; max-height:64px; padding:10px 14px; display:flex; align-items:center; gap:12px; overflow:hidden; }
+      .sidebar .plan-card, .side-group h3 { display:none; }
+      .side-group { margin-left:auto; display:flex; }
+      .nav-item { font-size:0; width:40px; padding:0; justify-content:center; }
+      .main { padding:16px; }
+      #detailView.active { grid-template-columns:1fr; gap:14px; }
+      #detailView .crumb, #detailView .hero, #detailView .tabs-nav, #detailView > .tab-panel.active { grid-column:1; grid-row:auto; }
+      .tabs-nav { position:relative; top:auto; display:flex; overflow-x:auto; padding:5px; background:#141920; border:1px solid var(--line); border-radius:7px; }
+      .tab-list { display:flex; flex-wrap:nowrap; gap:3px; }
+      .tab { width:auto; min-width:max-content; padding:0 11px; }
+      .tabs-nav > .actions { padding:0 0 0 5px; border:0; border-left:1px solid var(--line); }
+      #refreshDetail { width:38px; }
+      .hero { display:grid; }
+      .hero .actions { justify-content:flex-start; }
+    }
+    @media (max-width: 560px) {
+      h1 { font-size:22px; }
+      .overview-hero { display:grid; }
+      .grid, .left-column .grid, .fields, .form-grid, .two-columns { grid-template-columns:1fr; }
+      .metric, .metric:nth-child(2n), .metric:nth-child(3n) { border-right:0; }
+      .danger-zone { align-items:stretch; flex-direction:column; }
+      .danger-zone button { width:100%; }
+      .hero .actions button { flex:1 1 auto; }
+    }
   </style>
 </head>
 <body>
@@ -819,14 +932,16 @@ function panelHtml(csrfToken = "") {
         </div>
         <div class="tabs-nav">
           <div class="tab-list">
-            <button class="tab active" data-tab="overview">Aperçu</button>
-            <button class="tab" data-tab="console" data-requires-first-run>Console</button>
-            <button class="tab" data-tab="config" data-requires-first-run>Configuration</button>
-            <button class="tab" data-tab="performance">Performances</button>
-            <button class="tab" data-tab="players" data-requires-first-run>Joueurs</button>
-            <button class="tab" data-tab="worlds" data-requires-first-run>Mondes</button>
-            <button class="tab" data-tab="activity">Activité</button>
-            <select id="moreTab" data-requires-first-run aria-label="Plus de sections"><option value="">Plus…</option><option value="files">Fichiers</option><option value="backups">Sauvegardes</option></select>
+            <button class="tab active" data-tab="overview"><i data-lucide="layout-dashboard"></i>Aperçu</button>
+            <button class="tab" data-tab="console" data-requires-first-run><i data-lucide="terminal"></i>Console</button>
+            <button class="tab" data-tab="config" data-requires-first-run><i data-lucide="sliders-horizontal"></i>Configuration</button>
+            <button class="tab" data-tab="performance"><i data-lucide="gauge"></i>Performances</button>
+            <button class="tab" data-tab="players" data-requires-first-run><i data-lucide="users"></i>Joueurs</button>
+            <button class="tab" data-tab="worlds" data-requires-first-run><i data-lucide="map"></i>Mondes</button>
+            <button class="tab" data-tab="files" data-requires-first-run><i data-lucide="folder"></i>Fichiers</button>
+            <button class="tab" data-tab="backups" data-requires-first-run><i data-lucide="archive"></i>Sauvegardes</button>
+            <button class="tab" data-tab="activity"><i data-lucide="history"></i>Activité</button>
+            <select class="hidden" id="moreTab" data-requires-first-run aria-label="Plus de sections"><option value="">Plus…</option><option value="files">Fichiers</option><option value="backups">Sauvegardes</option></select>
           </div>
           <div class="actions">
             <button class="icon" id="refreshDetail" title="Actualiser"><i data-lucide="refresh-cw"></i></button>
@@ -841,7 +956,6 @@ function panelHtml(csrfToken = "") {
               <h2>Serveur</h2>
               <div class="actions">
                 <button class="primary" id="saveServer"><i data-lucide="save"></i>Enregistrer</button>
-                <button class="red" id="deleteServer"><i data-lucide="trash-2"></i>Supprimer</button>
               </div>
             </div>
             <div class="content">
@@ -850,6 +964,7 @@ function panelHtml(csrfToken = "") {
                 <div class="metric" data-requires-first-run><span>Uptime</span><strong id="serverUptime">...</strong></div>
                 <div class="metric" data-requires-first-run><span>Joueurs</span><strong id="playerCount">...</strong></div>
                 <div class="metric" data-requires-first-run><span>Stockage utilisé</span><strong id="diskUsage">...</strong></div>
+                <div class="metric"><span>Ressources</span><strong id="resourceAllocation">...</strong></div>
                 <div class="metric" data-requires-first-run><span>Dernière sauvegarde</span><strong id="lastBackup">...</strong></div>
                 <div class="metric" data-requires-first-run><span>Adresse locale</span><strong id="serverAddress">...</strong><button class="icon" id="copyAddress" title="Copier l’adresse"><i data-lucide="copy"></i></button></div>
                 <div class="metric" data-requires-first-run><span>Adresse publique</span><strong id="publicAddress">...</strong></div>
@@ -879,6 +994,10 @@ function panelHtml(csrfToken = "") {
                 </div>
               </div>
               <label class="checkrow" data-requires-first-run><input id="serverAutoStart" type="checkbox"> Démarrage automatique</label>
+              <div class="danger-zone">
+                <div><strong>Supprimer ce serveur</strong><span>Les fichiers, mondes et sauvegardes de cette instance seront supprimés.</span></div>
+                <button class="red" id="deleteServer"><i data-lucide="trash-2"></i>Supprimer</button>
+              </div>
             </div>
           </section>
 
@@ -1423,7 +1542,7 @@ function renderActive() {
     setPerformanceForm({ performanceProfile:"balanced" });
     $("statePill").className = "pill off";
     $("statePill").querySelector("span").textContent = "Aucun";
-    ["serverVersion", "serverUptime", "playerCount", "diskUsage", "lastBackup", "serverAddress", "publicAddress", "networkState", "lastServerError"].forEach((id) => { $(id).textContent = "-"; });
+    ["serverVersion", "serverUptime", "playerCount", "diskUsage", "resourceAllocation", "lastBackup", "serverAddress", "publicAddress", "networkState", "lastServerError"].forEach((id) => { $(id).textContent = "-"; });
     $("logs").textContent = "";
     clearPropertyForm();
     $("backupList").innerHTML = '<li><span class="muted">Aucun serveur sélectionné.</span></li>';
@@ -1453,6 +1572,7 @@ function renderActive() {
   $("serverUptime").textContent = formatDuration(status.uptimeSeconds || 0);
   $("playerCount").textContent = server.playerCount ?? "-";
   $("diskUsage").textContent = status.diskUsageLabel || "-";
+  $("resourceAllocation").textContent = (server.resources?.ramMb || 2048) + " Mo · " + (server.resources?.cpuCores || 2) + " cœur(s)";
   $("lastBackup").textContent = status.lastBackup ? formatDate(status.lastBackup.createdAt) : "Aucune";
   $("serverAddress").textContent = status.network?.localAddress || serverAddress(status);
   $("publicAddress").textContent = status.network?.publicAddress || "Non configurée";

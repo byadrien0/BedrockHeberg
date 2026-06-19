@@ -25,6 +25,7 @@ try {
       assert.equal(await page.getByRole("button", { name:"Mondes" }).isVisible(), false);
       assert.equal(await page.getByRole("button", { name:"Console" }).isVisible(), false);
     }
+    await page.screenshot({ path:path.resolve(".panel", "browser-overview-detail.png"), fullPage:true });
     await page.getByRole("button", { name:"Performances" }).click();
     await page.locator('[data-panel="performance"].active').waitFor();
     await page.locator("#performanceProfile").selectOption("performance");
@@ -54,9 +55,15 @@ try {
   await mobile.getByLabel("Mot de passe").fill(process.env.TEST_ADMIN_PASSWORD || "admin");
   await mobile.getByRole("button", { name:"Connexion" }).click();
   await mobile.waitForURL(`${baseUrl}/`);
-  const overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  let overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   assert.ok(overflow <= 1, `Débordement horizontal mobile: ${overflow}px`);
   await mobile.screenshot({ path:path.resolve(".panel", "browser-smoke-mobile.png"), fullPage:true });
+  await mobile.locator("[data-server]").first().click();
+  await mobile.locator("#installTitle").waitFor();
+  await mobile.getByRole("button", { name:"Performances" }).click();
+  overflow = await mobile.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  assert.ok(overflow <= 1, `Debordement horizontal mobile detail: ${overflow}px`);
+  await mobile.screenshot({ path:path.resolve(".panel", "browser-detail-mobile.png"), fullPage:true });
 } finally {
   await browser.close();
 }
