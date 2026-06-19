@@ -192,7 +192,7 @@ ServerAura embarque l'agent officiel Playit.gg dans son image Docker. Pour rendr
 1. Crée une clé d'agent depuis l'[assistant de configuration Docker Playit.gg](https://playit.gg/account/setup/wizard/new-account/docker/docker-name).
 2. Dans Railway, ouvre le service ServerAura puis **Variables**.
 3. Ajoute `PLAYIT_SECRET` avec la clé fournie par Playit. Ne la place jamais dans Git.
-4. Redéploie le service et vérifie dans les logs la ligne `Agent Playit demarre`.
+4. Redéploie le service et vérifie dans les logs les lignes `Agent Playit demarre` puis `tunnel running`.
 5. Dans le tableau de bord Playit, crée un tunnel **Minecraft Bedrock / UDP**.
 6. Configure l'adresse locale du tunnel sur `127.0.0.1:19132`.
 7. Copie l'adresse publique et le port attribués par Playit dans une variable Railway `PLAYIT_ADDRESS`, par exemple `exemple.gl.joinmc.link:24567`.

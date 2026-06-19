@@ -4,6 +4,8 @@ import fsp from "node:fs/promises";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import archiver from "archiver";
 import { ActivityStore } from "../src/activity-store.js";
 import { BedrockManager, bedrockDownloadUrlFromHtml, bedrockDownloadUrlFromManifest, playitAddressForPort } from "../src/bedrock-manager.js";
@@ -41,6 +43,28 @@ test("Playit configuration selects a tunnel per Bedrock port", () => {
   secured.appendLog("connected with private-agent-key");
   assert.equal(secured.logs[0], "connected with [secret]");
   assert.equal("secret" in secured.status(), false);
+});
+
+test("Playit uses the official headless Docker command", () => {
+  let invocation;
+  const child = new EventEmitter();
+  child.stdout = new PassThrough();
+  child.stderr = new PassThrough();
+  child.kill = () => {};
+  const manager = new PlayitManager({
+    secret:"agent-key",
+    binary:"playit",
+    spawn:(binary, args, options) => {
+      invocation = { binary, args, options };
+      return child;
+    }
+  });
+  manager.start();
+  child.emit("spawn");
+  assert.deepEqual(invocation.args, ["-s", "--secret", "agent-key", "--platform_docker", "start"]);
+  assert.equal(invocation.options.env.SECRET_KEY, "agent-key");
+  assert.equal(manager.status().running, true);
+  manager.stop();
 });
 
 test("operation queue reports progress and rejects duplicate queued work", async () => {

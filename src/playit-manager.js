@@ -5,6 +5,8 @@ export class PlayitManager {
     this.secret = String(options.secret || "").trim();
     this.address = String(options.address || "").trim();
     this.binary = options.binary || (process.platform === "win32" ? "playit.exe" : "playit");
+    this.arguments = options.arguments || ["-s", "--secret", this.secret, "--platform_docker", "start"];
+    this.spawn = options.spawn || spawn;
     this.child = null;
     this.retryTimer = null;
     this.stopping = false;
@@ -17,7 +19,7 @@ export class PlayitManager {
     if (!this.secret || this.child || this.stopping) return;
     this.state = "starting";
     this.lastError = "";
-    const child = spawn(this.binary, [], {
+    const child = this.spawn(this.binary, this.arguments, {
       env:{ ...process.env, SECRET_KEY:this.secret },
       stdio:["ignore", "pipe", "pipe"],
       windowsHide:true
