@@ -1485,7 +1485,7 @@ function renderInstallation(status) {
   const network = status.network || {};
   const address = network.publicAddress || network.localAddress || "Adresse indisponible";
   const messages = {
-    created:"Installe Bedrock sous Linux ou importe le binaire attendu sur Windows.",
+    created:"Telecharge et installe automatiquement la version officielle de Bedrock.",
     installed:"Le binaire est présent. Effectue maintenant le premier démarrage pour initialiser les fichiers et le monde.",
     initializing:"Bedrock prépare actuellement le serveur et son premier monde.",
     operational:"Version " + (status.version || "inconnue") + " · " + address + (network.warning ? " · " + network.warning : ""),

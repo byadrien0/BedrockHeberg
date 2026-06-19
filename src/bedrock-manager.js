@@ -305,15 +305,13 @@ export class BedrockManager {
 
   async installBedrock(force, reportProgress = () => {}) {
     if (!force && (await exists(this.executablePath()))) return;
-    if (process.platform === "win32") {
-      throw new Error("Telechargement automatique prevu pour Linux. Garde bedrock_server.exe pour le local Windows.");
-    }
     const url = this.downloadUrl || (await resolveLatestBedrockUrl());
     const tmpDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-install-"));
     const zipPath = path.join(tmpDir, "bedrock.zip");
     const extractDir = path.join(tmpDir, "extract");
     await fsp.mkdir(extractDir, { recursive: true });
-    this.appendLog(`[panel] Telechargement Bedrock Linux: ${url}\n`);
+    const platformName = process.platform === "win32" ? "Windows" : "Linux";
+    this.appendLog(`[panel] Telechargement Bedrock ${platformName}: ${url}\n`);
     reportProgress(10);
     await downloadFile(url, zipPath);
     reportProgress(55);
@@ -785,7 +783,20 @@ function defaultServerDir(rootDir) {
   return path.join(rootDir, "servers", "principal");
 }
 
-async function resolveLatestBedrockUrl() {
+async function resolveLatestBedrockUrl(platform = process.platform) {
+  const downloadType = platform === "win32" ? "serverBedrockWindows" : "serverBedrockLinux";
+  try {
+    const manifest = await fetch("https://net-secondary.web.minecraft-services.net/api/v1.0/download/links", {
+      headers: { "User-Agent": "BedrockHeberg/1.0" }
+    });
+    if (manifest.ok) {
+      const url = bedrockDownloadUrlFromManifest(await manifest.json(), downloadType);
+      if (url) return url;
+    }
+  } catch {
+    // The public download page below remains a fallback when the manifest is unavailable.
+  }
+
   const page = await fetch("https://www.minecraft.net/en-us/download/server/bedrock", {
     headers: { "User-Agent": "Mozilla/5.0 bedrock-railway-panel" }
   });
@@ -793,11 +804,22 @@ async function resolveLatestBedrockUrl() {
     throw new Error(`Page de telechargement Minecraft inaccessible (${page.status}).`);
   }
   const html = await page.text();
-  const match = html.match(/https:\/\/www\.minecraft\.net\/bedrockdedicatedserver\/bin-linux\/bedrock-server-[^"']+\.zip/);
-  if (!match) {
-    throw new Error("Lien Linux Bedrock introuvable. Definis BDS_DOWNLOAD_URL dans Railway.");
-  }
-  return match[0].replaceAll("&amp;", "&");
+  const url = bedrockDownloadUrlFromHtml(html, platform);
+  if (url) return url;
+  const platformName = platform === "win32" ? "Windows" : "Linux";
+  throw new Error(`Lien ${platformName} Bedrock introuvable. Reessaie plus tard ou importe le binaire manuellement.`);
+}
+
+export function bedrockDownloadUrlFromManifest(payload, downloadType) {
+  const links = payload?.result?.links || payload?.links || [];
+  return links.find((link) => link?.downloadType === downloadType)?.downloadUrl || "";
+}
+
+export function bedrockDownloadUrlFromHtml(html, platform = process.platform) {
+  const directory = platform === "win32" ? "bin-win" : "bin-linux";
+  const normalized = String(html || "").replaceAll("\\/", "/").replaceAll("&amp;", "&");
+  const pattern = new RegExp(`https:\\/\\/www\\.minecraft\\.net\\/bedrockdedicatedserver\\/${directory}\\/bedrock-server-[^\"'\\s<]+\\.zip`, "i");
+  return normalized.match(pattern)?.[0] || "";
 }
 
 async function downloadFile(url, target) {

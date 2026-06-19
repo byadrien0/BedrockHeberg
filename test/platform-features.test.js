@@ -6,9 +6,25 @@ import os from "node:os";
 import path from "node:path";
 import archiver from "archiver";
 import { ActivityStore } from "../src/activity-store.js";
-import { BedrockManager } from "../src/bedrock-manager.js";
+import { BedrockManager, bedrockDownloadUrlFromHtml, bedrockDownloadUrlFromManifest } from "../src/bedrock-manager.js";
 import { normalizeBackupPolicy } from "../src/multi-server-manager.js";
 import { UserStore, totp } from "../src/user-store.js";
+
+test("official Bedrock links select the current operating system", () => {
+  const manifest = { result:{ links:[
+    { downloadType:"serverBedrockWindows", downloadUrl:"https://example.test/bin-win/bedrock.zip" },
+    { downloadType:"serverBedrockLinux", downloadUrl:"https://example.test/bin-linux/bedrock.zip" }
+  ] } };
+  assert.match(bedrockDownloadUrlFromManifest(manifest, "serverBedrockWindows"), /bin-win/);
+  assert.match(bedrockDownloadUrlFromManifest(manifest, "serverBedrockLinux"), /bin-linux/);
+
+  const html = [
+    "https:\\/\\/www.minecraft.net\\/bedrockdedicatedserver\\/bin-win\\/bedrock-server-1.21.0.1.zip",
+    "https://www.minecraft.net/bedrockdedicatedserver/bin-linux/bedrock-server-1.21.0.1.zip"
+  ].join(" ");
+  assert.match(bedrockDownloadUrlFromHtml(html, "win32"), /bin-win/);
+  assert.match(bedrockDownloadUrlFromHtml(html, "linux"), /bin-linux/);
+});
 
 test("operation queue reports progress and rejects duplicate queued work", async () => {
   const rootDir = await fsp.mkdtemp(path.join(os.tmpdir(), "bedrock-operation-test-"));
