@@ -473,7 +473,7 @@ function panelHtml(csrfToken = "") {
     .file-editor { display:grid; gap:10px; }
     .file-editor textarea { min-height:360px; }
     .dashboard { display:grid; grid-template-columns:minmax(360px, .9fr) minmax(440px, 1.25fr); gap:18px; align-items:start; }
-    .left-column, .right-column { display:grid; gap:18px; align-content:start; }
+    .left-column { display:grid; gap:18px; align-content:start; }
     .tab-panel { display:none; }
     .tab-panel.active { display:block; }
     .tab-panel.split.active { display:grid; grid-template-columns:minmax(360px, .9fr) minmax(440px, 1.25fr); gap:18px; align-items:start; }
@@ -573,7 +573,7 @@ function panelHtml(csrfToken = "") {
         </div>
       </div>
 
-      <div class="tab-panel split active" data-panel="overview">
+      <div class="tab-panel active" data-panel="overview">
         <div class="left-column">
           <section>
             <div class="head">
@@ -605,21 +605,6 @@ function panelHtml(csrfToken = "") {
             </div>
           </section>
 
-        </div>
-
-        <div class="right-column">
-          <section>
-            <div class="head">
-              <h2>Actions rapides</h2>
-            </div>
-            <div class="content">
-              <div class="actions">
-                <button class="primary" id="overviewStartBtn"><i data-lucide="play"></i>Démarrer</button>
-                <button class="amber" id="overviewRestartBtn"><i data-lucide="rotate-cw"></i>Redémarrer</button>
-                <button class="red" id="overviewStopBtn"><i data-lucide="square"></i>Arrêter</button>
-              </div>
-            </div>
-          </section>
         </div>
       </div>
 
@@ -982,9 +967,6 @@ function renderActive() {
   ["startBtn", "restartBtn", "stopBtn", "reinstallBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile"].forEach((id) => {
     $(id).disabled = true;
   });
-    ["overviewStartBtn", "overviewRestartBtn", "overviewStopBtn"].forEach((id) => {
-      $(id).disabled = true;
-    });
     lucide.createIcons();
     return;
   }
@@ -997,11 +979,8 @@ function renderActive() {
   ["startBtn", "restartBtn", "stopBtn", "reinstallBtn", "saveServer", "deleteServer", "sendCommand", "createBackup", "saveProperties", "saveFile", "deleteFile"].forEach((id) => {
     $(id).disabled = false;
   });
-  ["overviewStartBtn", "overviewRestartBtn", "overviewStopBtn"].forEach((id) => {
-    $(id).disabled = false;
-  });
-  ["startBtn", "overviewStartBtn"].forEach((id) => { $(id).disabled = Boolean(status.running); });
-  ["restartBtn", "stopBtn", "overviewRestartBtn", "overviewStopBtn", "sendCommand"].forEach((id) => {
+  $("startBtn").disabled = Boolean(status.running);
+  ["restartBtn", "stopBtn", "sendCommand"].forEach((id) => {
     $(id).disabled = !status.running;
   });
   $("statePill").className = "pill " + (status.running ? "ok" : "off");
@@ -1267,9 +1246,6 @@ $("refreshLogs").onclick = () => refreshLogs().catch((error) => toast(error.mess
 $("startBtn").onclick = () => action("Serveur démarré.", () => api(endpoint("/start"), { method:"POST" }));
 $("stopBtn").onclick = () => action("Serveur arrêté.", () => api(endpoint("/stop"), { method:"POST" }));
 $("restartBtn").onclick = () => action("Serveur redémarré.", () => api(endpoint("/restart"), { method:"POST" }));
-$("overviewStartBtn").onclick = () => action("Serveur démarré.", () => api(endpoint("/start"), { method:"POST" }));
-$("overviewStopBtn").onclick = () => action("Serveur arrêté.", () => api(endpoint("/stop"), { method:"POST" }));
-$("overviewRestartBtn").onclick = () => action("Serveur redémarré.", () => api(endpoint("/restart"), { method:"POST" }));
 $("reinstallBtn").onclick = async () => {
   if (!await requireTypedConfirmation("Une sauvegarde sera créée avant de réinstaller les fichiers du serveur.", "REINSTALL", "Réinstaller le serveur")) return;
   action("Reinstallation terminee.", () => api(endpoint("/reinstall"), { method:"POST", body: JSON.stringify({ confirm: "REINSTALL" }) }));
